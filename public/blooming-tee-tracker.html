@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Blooming Tee — Progress Tracker (Size L)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;700&display=swap');
+
+  :root{
+    --bg:#f7f1e8;
+    --panel:#fffaf3;
+    --panel-2:#fdf4e8;
+    --ink:#4a3f35;
+    --ink-strong:#5a4a3a;
+    --muted:#9b8a78;
+    --line:#e8ddcc;
+    --line-strong:#d8c4a8;
+    --rose:#c98a8a;
+    --sage:#9aab8e;
+    --gold:#d98b3a;
+    --gold-soft:rgba(217,139,58,0.13);
+    --plum:#a878a0;
+    --done:#9aab8e;
+    --here:#d98b3a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Karla',sans-serif;}
+  .wrap{max-width:640px;margin:0 auto;padding:20px 16px 60px;}
+
+  header{text-align:center;margin-bottom:18px;}
+  h1{font-family:'Fraunces',serif;font-weight:600;font-size:25px;margin:0 0 4px;color:var(--ink-strong);letter-spacing:.3px;}
+  .sub{color:var(--muted);font-size:13px;}
+
+  /* overall progress */
+  .overall{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;margin-bottom:8px;box-shadow:0 2px 12px rgba(150,110,60,0.06);}
+  .overall .pct{font-family:'Fraunces',serif;font-size:42px;font-weight:600;color:var(--gold);line-height:1;text-align:center;}
+  .overall .pctlab{text-align:center;color:var(--muted);font-size:12px;margin:2px 0 14px;letter-spacing:.5px;text-transform:uppercase;}
+  .bar{height:14px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .bar > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#e0b070,#d98b3a);border-radius:9px;transition:width .5s cubic-bezier(.4,0,.2,1);}
+  .overall .rowsline{text-align:center;color:var(--muted);font-size:12px;margin-top:10px;}
+  .overall .rowsline b{color:var(--ink-strong);font-family:'Fraunces',serif;}
+
+  .encourage{text-align:center;font-family:'Fraunces',serif;font-style:italic;color:var(--rose);font-size:14px;margin:14px 4px 22px;min-height:20px;transition:opacity .4s;}
+
+  /* sections */
+  .section{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:border-color .3s;}
+  .section.here{border-color:var(--here);box-shadow:0 0 0 3px var(--gold-soft);}
+  .section.complete{opacity:.82;}
+  .sec-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;}
+  .sec-num{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:14px;color:var(--muted);transition:all .3s;}
+  .section.complete .sec-num{background:var(--done);border-color:var(--done);color:#fff;}
+  .section.here .sec-num{background:var(--here);border-color:var(--here);color:#fff;}
+  .sec-title{flex:1 1 auto;}
+  .sec-title .t{font-family:'Fraunces',serif;font-weight:600;font-size:16px;color:var(--ink-strong);}
+  .sec-title .meta{font-size:12px;color:var(--muted);margin-top:1px;}
+  .sec-badge{flex:0 0 auto;font-size:11px;color:var(--muted);text-align:right;}
+  .sec-badge .pc{font-family:'Fraunces',serif;font-size:15px;color:var(--gold);}
+  .chev{flex:0 0 auto;color:var(--line-strong);font-size:13px;transition:transform .3s;}
+  .section.open .chev{transform:rotate(90deg);}
+
+  .sec-body{max-height:0;overflow:hidden;transition:max-height .35s ease;}
+  .section.open .sec-body{max-height:600px;}
+  .sec-inner{padding:2px 16px 16px;}
+
+  .secbar{height:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:0 16px 14px;}
+  .secbar > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#b8c4a4,#9aab8e);border-radius:5px;transition:width .4s;}
+
+  /* counter rows */
+  .counter{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px dashed var(--line);}
+  .counter:first-child{border-top:none;}
+  .counter .clab{font-size:13px;color:var(--ink);flex:1;}
+  .counter .clab small{display:block;color:var(--muted);font-size:11px;margin-top:1px;}
+  .ctrls{display:flex;align-items:center;gap:8px;flex:0 0 auto;}
+  .ctrls button{width:42px;height:42px;border-radius:11px;border:1px solid var(--line-strong);background:var(--panel-2);color:var(--ink-strong);font-size:20px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .2s;}
+  .ctrls button:active{transform:scale(.9);background:var(--gold-soft);}
+  .ctrls .val{min-width:62px;text-align:center;font-family:'Fraunces',serif;font-size:20px;color:var(--ink-strong);}
+  .ctrls .val small{display:block;font-family:'Karla';font-size:10px;color:var(--muted);font-weight:400;}
+
+  .checkline{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px dashed var(--line);}
+  .checkline:first-child{border-top:none;}
+  .checkbox{width:26px;height:26px;border-radius:8px;border:2px solid var(--line-strong);background:var(--panel-2);cursor:pointer;flex:0 0 auto;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+  .checkbox.on{background:var(--done);border-color:var(--done);}
+  .checkbox.on::after{content:"✓";color:#fff;font-size:16px;font-weight:700;}
+  .checkline .cl{font-size:13px;color:var(--ink);flex:1;}
+  .checkline .cl small{display:block;color:var(--muted);font-size:11px;margin-top:1px;}
+
+  .lengthnote{font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:6px;line-height:1.5;}
+  .lengthnote input{width:56px;padding:4px 6px;border:1px solid var(--line-strong);border-radius:7px;font-family:'Karla';font-size:14px;text-align:center;background:#fff;color:var(--ink-strong);}
+
+  .notes{margin-top:8px;}
+  .notes label{font-size:12px;color:var(--muted);display:block;margin-bottom:5px;}
+  .notes textarea{width:100%;min-height:54px;border:1px solid var(--line);border-radius:10px;padding:10px;font-family:'Karla';font-size:13px;color:var(--ink);background:var(--panel-2);resize:vertical;}
+
+  .footer{text-align:center;margin-top:24px;}
+  .reset{background:none;border:1px solid var(--line-strong);color:var(--muted);font-size:12px;padding:9px 18px;border-radius:10px;cursor:pointer;font-family:'Karla';}
+  .reset:active{background:var(--gold-soft);}
+  .resetconfirm{color:var(--rose);font-size:11px;margin-top:8px;height:14px;}
+
+  .tip{font-size:11px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Blooming Tee — Progress</h1>
+    <div class="sub">Size L &middot; worked top-down &middot; tap to track every section</div>
+  </header>
+
+  <div class="overall">
+    <div class="pct" id="overallPct">0%</div>
+    <div class="pctlab">overall shirt</div>
+    <div class="bar"><i id="overallBar"></i></div>
+    <div class="rowsline"><b id="rowsDone">0</b> of <b id="rowsTotal">0</b> rows worked</div>
+  </div>
+
+  <div class="encourage" id="encourage"></div>
+
+  <div id="sections"></div>
+
+  <div class="footer">
+    <button class="reset" id="resetBtn">Reset all progress</button>
+    <div class="resetconfirm" id="resetConfirm"></div>
+  </div>
+
+  <div class="tip">Your progress saves automatically &middot; the glowing section is where you are now</div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  Blooming Tee — Size L construction model
+//  Counter sections track rows; check sections track discrete steps.
+// ─────────────────────────────────────────────
+const STORE = 'bloomingTeeShirtL';
+
+// default body length in rounds (user-adjustable). 1 round ≈ 1 row.
+// A non-cropped L body is often ~40 rounds; user sets their own target.
+let state = {
+  inc: 0,          // increase rows (target 11)
+  grid: 0,         // grid/yoke rows (target 15)
+  armhole: false,  // armhole + back join done
+  bodyTarget: 40,  // user-defined target rounds for the body
+  body: 0,         // body rounds done
+  bodyFinish: false, // final hdc round + join
+  neckBase: 0,     // neckline base rows (target 6)
+  neckTie: 0,      // tie rows, both sides combined (target 96 = 48x2)
+  sleeve: 0,       // sleeve rows, both combined (target 12 = 6x2 short)
+  sleeveFinish: false, // hdc finish round both sleeves
+  outline: false,  // final hdc outline
+  notes: ''
+};
+
+try{ const s = localStorage.getItem(STORE); if(s) state = Object.assign(state, JSON.parse(s)); }catch(e){}
+
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){} }
+
+// Section definitions. type: 'counter' | 'check' | 'body'
+const SECTIONS = [
+  {
+    id:'inc', n:1, title:'Raglan increases', type:'counter',
+    target:11, key:'inc', unit:'rows',
+    meta:'11 increase rows before the chart',
+    desc:'Foundation ch 107, then increase rows building the raglan shaping.'
+  },
+  {
+    id:'grid', n:2, title:'Bouquet yoke (chart)', type:'counter',
+    target:15, key:'grid', unit:'rows',
+    meta:'15 grid rows through the purple section',
+    desc:'Follow the filet chart — 15 rows, then split for armholes.'
+  },
+  {
+    id:'armhole', n:3, title:'Armholes + join back', type:'check',
+    items:[
+      {key:'armhole', label:'Chain the armholes & join back into rounds', sub:'ch ~50 each side, then ch 8 to close the back'}
+    ],
+    meta:'Connect corners, begin working in rounds'
+  },
+  {
+    id:'body', n:4, title:'Body in rounds', type:'body',
+    key:'body', targetKey:'bodyTarget', unit:'rounds',
+    meta:'Worked to your chosen length',
+    desc:'The meditative part — crochet in rounds until it’s as long as you like.',
+    finishKey:'bodyFinish', finishLabel:'Final hdc round + sl st to close'
+  },
+  {
+    id:'neck', n:5, title:'Neckline + ties', type:'counter-multi',
+    counters:[
+      {key:'neckBase', target:6, label:'Base rows', sub:'6 rows along the foundation chain', unit:'rows'},
+      {key:'neckTie', target:96, label:'Tie rows (both sides)', sub:'48 rows each side = 96 total', unit:'rows'}
+    ],
+    meta:'6 base rows + 48 rows per tie'
+  },
+  {
+    id:'sleeve', n:6, title:'Sleeves + outline', type:'counter-multi',
+    counters:[
+      {key:'sleeve', target:12, label:'Sleeve rows (both)', sub:'~6 rows each, short-sleeve reference', unit:'rows'}
+    ],
+    checks:[
+      {key:'sleeveFinish', label:'hdc finish round on both sleeves', sub:''},
+      {key:'outline', label:'Final hdc outline (back, ties, neckline)', sub:'the very last step'}
+    ],
+    meta:'Sleeves, then the finishing outline'
+  }
+];
+
+// Weighted total rows for the overall percentage.
+// Body uses the user's target so the denominator reflects their plan.
+function totals(){
+  const t = {
+    inc:11, grid:15,
+    armhole:2,              // count the join as ~2 rows of effort
+    body:Math.max(1,state.bodyTarget), bodyFinish:1,
+    neckBase:6, neckTie:96,
+    sleeve:12, sleeveFinish:1, outline:1
+  };
+  return t;
+}
+function doneRows(){
+  const t = totals();
+  let d = 0;
+  d += Math.min(state.inc, t.inc);
+  d += Math.min(state.grid, t.grid);
+  d += state.armhole ? t.armhole : 0;
+  d += Math.min(state.body, t.body);
+  d += state.bodyFinish ? t.bodyFinish : 0;
+  d += Math.min(state.neckBase, t.neckBase);
+  d += Math.min(state.neckTie, t.neckTie);
+  d += Math.min(state.sleeve, t.sleeve);
+  d += state.sleeveFinish ? t.sleeveFinish : 0;
+  d += state.outline ? t.outline : 0;
+  return d;
+}
+function totalRows(){
+  const t = totals();
+  return Object.values(t).reduce((a,b)=>a+b,0);
+}
+
+const ENCOURAGEMENTS = [
+  "One stitch at a time — you’re building something beautiful.",
+  "The fiddly counting is nearly behind you. Keep going.",
+  "Look how far you’ve come already.",
+  "Steady hands, soft heart. This is yours.",
+  "Every row is a little act of devotion.",
+  "The bouquet is blooming under your hook.",
+  "Rest when you need to. The yarn will wait.",
+  "You’re past the hardest counting — enjoy the rhythm now.",
+  "Warm, earthy, romantic — just like you imagined it.",
+  "This top is going to be so worth it."
+];
+
+function pct(done, total){ return total>0 ? Math.round(done/total*100) : 0; }
+
+function sectionProgress(sec){
+  if(sec.type==='counter'){
+    return {done:Math.min(state[sec.key],sec.target), total:sec.target};
+  }
+  if(sec.type==='check'){
+    const total = sec.items.length;
+    const done = sec.items.filter(i=>state[i.key]).length;
+    return {done, total};
+  }
+  if(sec.type==='body'){
+    const total = Math.max(1,state.bodyTarget) + 1; // +1 for finish
+    let done = Math.min(state.body, state.bodyTarget);
+    if(state.bodyFinish) done += 1;
+    return {done, total};
+  }
+  if(sec.type==='counter-multi'){
+    let done=0,total=0;
+    (sec.counters||[]).forEach(c=>{ done+=Math.min(state[c.key],c.target); total+=c.target; });
+    (sec.checks||[]).forEach(c=>{ total+=1; if(state[c.key]) done+=1; });
+    return {done,total};
+  }
+  return {done:0,total:1};
+}
+
+// Determine the "current" section = first not-complete one
+function currentSectionId(){
+  for(const sec of SECTIONS){
+    const p = sectionProgress(sec);
+    if(p.done < p.total) return sec.id;
+  }
+  return null;
+}
+
+let openSection = null;
+
+function render(){
+  const host = document.getElementById('sections');
+  const curId = currentSectionId();
+  if(openSection===null) openSection = curId; // auto-open current
+
+  host.innerHTML = '';
+  SECTIONS.forEach(sec=>{
+    const p = sectionProgress(sec);
+    const complete = p.done>=p.total;
+    const isHere = sec.id===curId;
+    const isOpen = sec.id===openSection;
+
+    const el = document.createElement('div');
+    el.className = 'section'+(complete?' complete':'')+(isHere?' here':'')+(isOpen?' open':'');
+
+    const secPct = pct(p.done,p.total);
+    el.innerHTML = `
+      <div class="sec-head" data-toggle="${sec.id}">
+        <div class="sec-num">${complete?'✓':sec.n}</div>
+        <div class="sec-title">
+          <div class="t">${sec.title}</div>
+          <div class="meta">${sec.meta}</div>
+        </div>
+        <div class="sec-badge"><div class="pc">${secPct}%</div></div>
+        <div class="chev">▶</div>
+      </div>
+      <div class="secbar"><i style="width:${secPct}%"></i></div>
+      <div class="sec-body"><div class="sec-inner" id="inner-${sec.id}"></div></div>
+    `;
+    host.appendChild(el);
+    buildInner(sec);
+  });
+
+  // overall
+  const d = doneRows(), t = totalRows();
+  const op = pct(d,t);
+  document.getElementById('overallPct').textContent = op+'%';
+  document.getElementById('overallBar').style.width = op+'%';
+  document.getElementById('rowsDone').textContent = d;
+  document.getElementById('rowsTotal').textContent = t;
+
+  // encouragement
+  const enc = document.getElementById('encourage');
+  enc.textContent = ENCOURAGEMENTS[Math.floor(d/3)%ENCOURAGEMENTS.length] || ENCOURAGEMENTS[0];
+
+  // toggles
+  document.querySelectorAll('[data-toggle]').forEach(h=>{
+    h.addEventListener('click', ()=>{
+      const id = h.getAttribute('data-toggle');
+      openSection = (openSection===id) ? '__none__' : id;
+      render();
+    });
+  });
+}
+
+function counterRow(label, sub, key, target, unit){
+  return `
+    <div class="counter">
+      <div class="clab">${label}<small>${sub||''}</small></div>
+      <div class="ctrls">
+        <button data-dec="${key}">−</button>
+        <div class="val"><span id="v-${key}">${state[key]}</span><small>of ${target} ${unit}</small></div>
+        <button data-inc="${key}" data-max="${target}">+</button>
+      </div>
+    </div>`;
+}
+function checkRow(label, sub, key){
+  return `
+    <div class="checkline">
+      <div class="checkbox ${state[key]?'on':''}" data-check="${key}"></div>
+      <div class="cl">${label}<small>${sub||''}</small></div>
+    </div>`;
+}
+
+function buildInner(sec){
+  const inner = document.getElementById('inner-'+sec.id);
+  if(!inner) return;
+  let html = '';
+  if(sec.desc) html += `<div class="lengthnote">${sec.desc}</div><div style="height:10px"></div>`;
+
+  if(sec.type==='counter'){
+    html += counterRow('Rows completed', sec.meta, sec.key, sec.target, sec.unit);
+  }
+  else if(sec.type==='check'){
+    sec.items.forEach(i=> html += checkRow(i.label, i.sub, i.key));
+  }
+  else if(sec.type==='body'){
+    html += `<div class="lengthnote">Set your target length, then count up each round as you go. Length is your call — shorter for cropped, longer for a fuller top.<br><br>
+      My target: <input type="number" id="bodyTargetInput" min="1" max="120" value="${state.bodyTarget}"> rounds</div><div style="height:10px"></div>`;
+    html += counterRow('Body rounds', 'worked in the round, down from the armholes', 'body', state.bodyTarget, 'rounds');
+    html += checkRow(sec.finishLabel, '', sec.finishKey);
+  }
+  else if(sec.type==='counter-multi'){
+    (sec.counters||[]).forEach(c=> html += counterRow(c.label, c.sub, c.key, c.target, c.unit));
+    (sec.checks||[]).forEach(c=> html += checkRow(c.label, c.sub, c.key));
+  }
+
+  inner.innerHTML = html;
+
+  // wire buttons
+  inner.querySelectorAll('[data-inc]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const k=b.getAttribute('data-inc'); const max=+b.getAttribute('data-max');
+      if(state[k]<max){ state[k]++; save(); refreshLight(); }
+    });
+  });
+  inner.querySelectorAll('[data-dec]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const k=b.getAttribute('data-dec');
+      if(state[k]>0){ state[k]--; save(); refreshLight(); }
+    });
+  });
+  inner.querySelectorAll('[data-check]').forEach(c=>{
+    c.addEventListener('click', ()=>{
+      const k=c.getAttribute('data-check');
+      state[k]=!state[k]; save(); render();
+    });
+  });
+  const bt = inner.querySelector('#bodyTargetInput');
+  if(bt){
+    bt.addEventListener('change', ()=>{
+      let v = parseInt(bt.value)||1; v=Math.max(1,Math.min(120,v));
+      state.bodyTarget=v; if(state.body>v) state.body=v; save(); render();
+    });
+  }
+}
+
+// lightweight refresh that updates numbers without collapsing sections
+function refreshLight(){
+  // update visible counter values
+  SECTIONS.forEach(sec=>{
+    const keys = [];
+    if(sec.type==='counter') keys.push(sec.key);
+    if(sec.type==='body') keys.push('body');
+    if(sec.type==='counter-multi'){ (sec.counters||[]).forEach(c=>keys.push(c.key)); }
+    keys.forEach(k=>{ const el=document.getElementById('v-'+k); if(el) el.textContent=state[k]; });
+    // section bar + badge
+    const p = sectionProgress(sec);
+    const secEl = [...document.querySelectorAll('.section')].find(e=>e.querySelector('[data-toggle="'+sec.id+'"]'));
+    if(secEl){
+      const secPct = pct(p.done,p.total);
+      const bar = secEl.querySelector('.secbar > i'); if(bar) bar.style.width=secPct+'%';
+      const badge = secEl.querySelector('.sec-badge .pc'); if(badge) badge.textContent=secPct+'%';
+    }
+  });
+  // overall
+  const d=doneRows(), t=totalRows(), op=pct(d,t);
+  document.getElementById('overallPct').textContent=op+'%';
+  document.getElementById('overallBar').style.width=op+'%';
+  document.getElementById('rowsDone').textContent=d;
+  document.getElementById('rowsTotal').textContent=t;
+  const enc=document.getElementById('encourage');
+  enc.textContent=ENCOURAGEMENTS[Math.floor(d/3)%ENCOURAGEMENTS.length]||ENCOURAGEMENTS[0];
+  // if a section just completed or a new current emerged, re-evaluate glow
+  syncGlow();
+}
+
+function syncGlow(){
+  const curId = currentSectionId();
+  document.querySelectorAll('.section').forEach(secEl=>{
+    const id = secEl.querySelector('[data-toggle]').getAttribute('data-toggle');
+    const sec = SECTIONS.find(s=>s.id===id);
+    const p = sectionProgress(sec);
+    secEl.classList.toggle('complete', p.done>=p.total);
+    secEl.classList.toggle('here', id===curId);
+    const num = secEl.querySelector('.sec-num');
+    if(num) num.textContent = (p.done>=p.total) ? '✓' : sec.n;
+  });
+}
+
+// reset with double-tap (no confirm popups, per your standard)
+let resetArmed=false;
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  const c=document.getElementById('resetConfirm');
+  if(!resetArmed){
+    resetArmed=true; c.textContent='Tap again to clear everything';
+    setTimeout(()=>{resetArmed=false;c.textContent='';},3000);
+  } else {
+    localStorage.removeItem(STORE);
+    state={inc:0,grid:0,armhole:false,bodyTarget:40,body:0,bodyFinish:false,neckBase:0,neckTie:0,sleeve:0,sleeveFinish:false,outline:false,notes:''};
+    resetArmed=false; c.textContent=''; openSection=null; render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
