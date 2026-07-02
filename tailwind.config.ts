@@ -61,11 +61,6 @@ const config: Config = {
           800: "#443e18",
           900: "#2d2911",
         },
-        sidebar: {
-          DEFAULT: "#122021",
-          active:  "#203a3c",
-          text:    "#c0cdce",
-        },
       },
     },
   },

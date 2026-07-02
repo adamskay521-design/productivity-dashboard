@@ -11,7 +11,7 @@ const COLORS = [
   "#7c5cba", "#4a7a8c", "#8a6a1a", "#6b4c3b",
 ];
 
-const HEATMAP_COLORS = ["#f1f5f9", "#f0dec8", "#e0a858", "#b07020", "#562e04"];
+const HEATMAP_COLORS = ["#f1f5f9", "#f6e3d5", "#e9a572", "#ce6717", "#5a2e0c"];
 
 const HABIT_TIME_LABELS: Record<(typeof HABIT_TIMES)[number], string> = {
   morning: "Morning",

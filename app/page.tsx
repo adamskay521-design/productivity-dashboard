@@ -330,10 +330,10 @@ export default function Dashboard() {
           <p className="text-xs text-stone-400">open items</p>
         </Link>
 
-        <Link href="/habits" className="rounded-3xl p-5 shadow-sm hover:shadow-md transition-all" style={{ background: "#2a1508" }}>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-nude-400 font-semibold mb-4">Habits</p>
-          <p className="text-4xl font-bold text-cream-100 leading-none mb-1.5">{todayHabitsDone}</p>
-          <p className="text-xs text-nude-400/80">of {habits.length} today</p>
+        <Link href="/habits" className="bg-sage-500 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-sage-100 font-semibold mb-4">Habits</p>
+          <p className="text-4xl font-bold text-white leading-none mb-1.5">{todayHabitsDone}</p>
+          <p className="text-xs text-sage-100/80">of {habits.length} today</p>
         </Link>
 
         <div className="bg-white rounded-3xl p-5 shadow-sm">
@@ -342,10 +342,10 @@ export default function Dashboard() {
           <p className="text-xs text-stone-400">of 8 cups today</p>
         </div>
 
-        <Link href="/goals" className="rounded-3xl p-5 shadow-sm hover:shadow-md transition-all" style={{ background: "#b07020" }}>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-nude-100 font-semibold mb-4">Q{currentQ} Goals</p>
+        <Link href="/goals" className="bg-nude-400 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-nude-50 font-semibold mb-4">Q{currentQ} Goals</p>
           <p className="text-4xl font-bold text-white leading-none mb-1.5">{completedGoals.length}</p>
-          <p className="text-xs text-nude-100/80">of {activeGoals.length} complete</p>
+          <p className="text-xs text-nude-50/80">of {activeGoals.length} complete</p>
         </Link>
       </div>
 
@@ -668,26 +668,26 @@ export default function Dashboard() {
 
       {/* ── LIFE SNAPSHOT ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Link href="/goals" className="rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group" style={{ background: "#1a0d05" }}>
+        <Link href="/goals" className="bg-drose-500 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-nude-400 font-semibold flex items-center gap-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-drose-100 font-semibold flex items-center gap-2">
               <Star className="w-3.5 h-3.5" /> Q{currentQ} {currentYear} Goals
             </p>
-            <span className="text-[10px] text-nude-400/60 group-hover:text-nude-400 transition-colors">View all →</span>
+            <span className="text-[10px] text-drose-100/70 group-hover:text-drose-100 transition-colors">View all →</span>
           </div>
           {activeGoals.length > 0 ? (
             <>
               <div className="flex items-end gap-2 mb-4">
-                <span className="text-4xl font-bold text-cream-100">{completedGoals.length}</span>
-                <span className="text-stone-400 mb-1">/ {activeGoals.length} complete</span>
+                <span className="text-4xl font-bold text-white">{completedGoals.length}</span>
+                <span className="text-drose-100/80 mb-1">/ {activeGoals.length} complete</span>
               </div>
-              <div className="w-full rounded-full h-1.5" style={{ background: "rgba(255,255,255,0.1)" }}>
-                <div className="h-1.5 rounded-full bg-nude-400 transition-all" style={{ width: `${avgProgress}%` }} />
+              <div className="w-full rounded-full h-1.5 bg-white/20">
+                <div className="h-1.5 rounded-full bg-white transition-all" style={{ width: `${avgProgress}%` }} />
               </div>
-              <p className="text-[11px] text-nude-400/60 mt-2">{avgProgress}% average progress</p>
+              <p className="text-[11px] text-drose-100/70 mt-2">{avgProgress}% average progress</p>
             </>
           ) : (
-            <p className="text-sm text-stone-500">No goals set for Q{currentQ} yet</p>
+            <p className="text-sm text-drose-100/80">No goals set for Q{currentQ} yet</p>
           )}
         </Link>
 
