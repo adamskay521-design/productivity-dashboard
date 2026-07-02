@@ -56,7 +56,7 @@ export default function Sidebar() {
 
       {/* Divider */}
       <div className="mx-6 mb-4 h-px"
-        style={{ background: "linear-gradient(to right, rgba(200,168,120,0.35), transparent)" }} />
+        style={{ background: "linear-gradient(to right, rgba(192,205,206,0.35), transparent)" }} />
 
       {/* Nav */}
       <nav className="flex-1 px-3 overflow-y-auto scrollbar-thin space-y-0.5 pb-2">
@@ -89,7 +89,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="px-6 py-5" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
         <p className="text-[9px] tracking-[0.25em] font-medium uppercase"
-          style={{ color: "rgba(200,168,120,0.4)" }}>
+          style={{ color: "rgba(192,205,206,0.4)" }}>
           your space
         </p>
       </div>
