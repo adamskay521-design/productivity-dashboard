@@ -41,8 +41,16 @@ export default function GoalsPage() {
 
   const loadMilestones = useCallback(async (goalId: number) => {
     const data = await fetch(`/api/goal-milestones?goalId=${goalId}`).then((r) => r.json());
-    setMilestones((prev) => ({ ...prev, [goalId]: Array.isArray(data) ? data : [] }));
+    const list: GoalMilestone[] = Array.isArray(data) ? data : [];
+    setMilestones((prev) => ({ ...prev, [goalId]: list }));
+    return list;
   }, []);
+
+  async function syncProgressFromMilestones(goalId: number, list: GoalMilestone[]) {
+    if (list.length === 0) return;
+    const pct = Math.round((list.filter((m) => m.completed).length / list.length) * 100);
+    await updateProgress(goalId, pct);
+  }
 
   function getMilestoneInput(goalId: number) {
     return milestoneInput[goalId] ?? { title: "", dueDate: "", reward: "" };
@@ -58,7 +66,8 @@ export default function GoalsPage() {
       body: JSON.stringify({ goalId, title, dueDate: input.dueDate || null, reward: input.reward }),
     });
     setMilestoneInput((prev) => ({ ...prev, [goalId]: { title: "", dueDate: "", reward: "" } }));
-    loadMilestones(goalId);
+    const list = await loadMilestones(goalId);
+    await syncProgressFromMilestones(goalId, list);
   }
 
   async function toggleMilestone(id: number, goalId: number, completed: boolean) {
@@ -67,12 +76,14 @@ export default function GoalsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ completed }),
     });
-    loadMilestones(goalId);
+    const list = await loadMilestones(goalId);
+    await syncProgressFromMilestones(goalId, list);
   }
 
   async function deleteMilestone(id: number, goalId: number) {
     await fetch(`/api/goal-milestones/${id}`, { method: "DELETE" });
-    loadMilestones(goalId);
+    const list = await loadMilestones(goalId);
+    await syncProgressFromMilestones(goalId, list);
   }
 
   async function createGoal(e: React.FormEvent) {
