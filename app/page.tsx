@@ -716,6 +716,19 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* ── CRAFT JOURNAL ── */}
+      <div className="bg-white rounded-3xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold flex items-center gap-2">
+            <Scissors className="w-3.5 h-3.5 text-drose-400" /> Craft Journal
+          </p>
+          <a href="https://craft-journal-kayla-adams.vercel.app" target="_blank" rel="noopener noreferrer"
+            className="text-[10px] text-stone-300 hover:text-nude-500 transition-colors">Open full app →</a>
+        </div>
+        <iframe src="https://craft-journal-kayla-adams.vercel.app" loading="lazy"
+          className="w-full rounded-2xl border border-cream-200" style={{ height: 600 }} />
+      </div>
+
       {/* ── MINI CALENDAR ── */}
       <div className="bg-white rounded-3xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
