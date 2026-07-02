@@ -10,7 +10,7 @@ export async function PATCH(
   try {
     const id = parseInt(params.id);
     const body = await request.json();
-    const { title, category, description, status, progressPercent } = body;
+    const { title, category, description, measurable, targetDate, reward, status, progressPercent } = body;
 
     const [row] = await db
       .update(goals)
@@ -18,6 +18,9 @@ export async function PATCH(
         ...(title !== undefined && { title }),
         ...(category !== undefined && { category }),
         ...(description !== undefined && { description }),
+        ...(measurable !== undefined && { measurable }),
+        ...(targetDate !== undefined && { targetDate: targetDate || null }),
+        ...(reward !== undefined && { reward }),
         ...(status !== undefined && { status }),
         ...(progressPercent !== undefined && { progressPercent }),
         updatedAt: new Date(),

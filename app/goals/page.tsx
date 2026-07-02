@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
-import { Plus, X, Trash2, Loader2, Trophy, Star, ChevronDown, ChevronUp } from "lucide-react";
-import type { Goal } from "@/lib/schema";
+import { useEffect, useState, useCallback } from "react";
+import { format, parseISO, isPast } from "date-fns";
+import { Plus, X, Trash2, Loader2, Trophy, Star, ChevronDown, ChevronUp, CheckSquare, Square, CalendarDays, Gift, Ruler } from "lucide-react";
+import type { Goal, GoalMilestone } from "@/lib/schema";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_META } from "@/lib/schema";
 
 function getCurrentQuarter() {
@@ -21,8 +21,11 @@ export default function GoalsPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedGoal, setExpandedGoal] = useState<number | null>(null);
+  const [milestones, setMilestones] = useState<Record<number, GoalMilestone[]>>({});
+  const [milestoneInput, setMilestoneInput] = useState<Record<number, { title: string; dueDate: string; reward: string }>>({});
   const [form, setForm] = useState({
     title: "", category: "personal" as string, description: "",
+    measurable: "", targetDate: "", reward: "",
   });
   const [filterCategory, setFilterCategory] = useState<string>("all");
 
@@ -35,6 +38,42 @@ export default function GoalsPage() {
 
   useEffect(() => { load(); }, [quarter, year]);
 
+  const loadMilestones = useCallback(async (goalId: number) => {
+    const data = await fetch(`/api/goal-milestones?goalId=${goalId}`).then((r) => r.json());
+    setMilestones((prev) => ({ ...prev, [goalId]: Array.isArray(data) ? data : [] }));
+  }, []);
+
+  function getMilestoneInput(goalId: number) {
+    return milestoneInput[goalId] ?? { title: "", dueDate: "", reward: "" };
+  }
+
+  async function addMilestone(goalId: number) {
+    const input = getMilestoneInput(goalId);
+    const title = input.title.trim();
+    if (!title) return;
+    await fetch("/api/goal-milestones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goalId, title, dueDate: input.dueDate || null, reward: input.reward }),
+    });
+    setMilestoneInput((prev) => ({ ...prev, [goalId]: { title: "", dueDate: "", reward: "" } }));
+    loadMilestones(goalId);
+  }
+
+  async function toggleMilestone(id: number, goalId: number, completed: boolean) {
+    await fetch(`/api/goal-milestones/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed }),
+    });
+    loadMilestones(goalId);
+  }
+
+  async function deleteMilestone(id: number, goalId: number) {
+    await fetch(`/api/goal-milestones/${id}`, { method: "DELETE" });
+    loadMilestones(goalId);
+  }
+
   async function createGoal(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
@@ -42,9 +81,9 @@ export default function GoalsPage() {
     await fetch("/api/goals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, quarter, year }),
+      body: JSON.stringify({ ...form, targetDate: form.targetDate || null, quarter, year }),
     });
-    setForm({ title: "", category: "personal", description: "" });
+    setForm({ title: "", category: "personal", description: "", measurable: "", targetDate: "", reward: "" });
     setShowForm(false);
     setSaving(false);
     load();
@@ -227,6 +266,45 @@ export default function GoalsPage() {
                 className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 resize-none"
               />
             </div>
+
+            {/* SMART fields */}
+            <div className="border-t border-cream-100 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-stone-400 mb-3">Make it SMART</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-stone-500 mb-1 flex items-center gap-1.5">
+                    <Ruler className="w-3 h-3" /> How will you measure success?
+                  </label>
+                  <input
+                    type="text" value={form.measurable} onChange={(e) => setForm({ ...form, measurable: e.target.value })}
+                    placeholder="e.g. Finish 5 books, track pages read weekly"
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-stone-500 mb-1 flex items-center gap-1.5">
+                      <CalendarDays className="w-3 h-3" /> Target date
+                    </label>
+                    <input
+                      type="date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })}
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-stone-500 mb-1 flex items-center gap-1.5">
+                      <Gift className="w-3 h-3" /> Reward
+                    </label>
+                    <input
+                      type="text" value={form.reward} onChange={(e) => setForm({ ...form, reward: e.target.value })}
+                      placeholder="e.g. New pair of shoes"
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex gap-3">
               <button type="submit" disabled={saving}
                 className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 disabled:opacity-60 text-white font-medium px-5 py-2 rounded-lg transition-all hover:scale-105 active:scale-95">
@@ -302,7 +380,24 @@ export default function GoalsPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-stone-400 mb-3">{meta.label}</p>
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <p className="text-xs text-stone-400">{meta.label}</p>
+                        {goal.targetDate && (
+                          <span className={`text-xs flex items-center gap-1 px-1.5 py-0.5 rounded-full ${
+                            !isCompleted && isPast(parseISO(goal.targetDate))
+                              ? "text-red-500 bg-red-50"
+                              : "text-stone-400 bg-cream-50"
+                          }`}>
+                            <CalendarDays className="w-3 h-3" />
+                            {format(parseISO(goal.targetDate), "MMM d, yyyy")}
+                          </span>
+                        )}
+                        {goal.reward && (
+                          <span className="text-xs flex items-center gap-1 px-1.5 py-0.5 rounded-full text-amber-600 bg-amber-50">
+                            <Gift className="w-3 h-3" /> {goal.reward}
+                          </span>
+                        )}
+                      </div>
 
                       {/* Progress bar */}
                       <div className="mb-1">
@@ -335,7 +430,11 @@ export default function GoalsPage() {
 
                     <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => setExpandedGoal(isExpanded ? null : goal.id)}
+                        onClick={() => {
+                          const next = isExpanded ? null : goal.id;
+                          setExpandedGoal(next);
+                          if (next !== null) loadMilestones(next);
+                        }}
                         className="text-stone-300 hover:text-stone-500 transition-colors p-1"
                       >
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -347,9 +446,96 @@ export default function GoalsPage() {
                     </div>
                   </div>
 
-                  {isExpanded && goal.description && (
-                    <div className="mt-3 pl-11">
-                      <p className="text-sm text-stone-500 italic">{goal.description}</p>
+                  {isExpanded && (
+                    <div className="mt-4 pl-11 space-y-3">
+                      {goal.description && (
+                        <p className="text-sm text-stone-500 italic">{goal.description}</p>
+                      )}
+                      {goal.measurable && (
+                        <p className="text-xs text-stone-500 flex items-start gap-1.5">
+                          <Ruler className="w-3.5 h-3.5 mt-0.5 shrink-0 text-stone-400" />
+                          <span><span className="font-medium text-stone-600">Measuring: </span>{goal.measurable}</span>
+                        </p>
+                      )}
+
+                      {/* Milestones */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-stone-400 mb-2">Mini Goals</p>
+                        {(milestones[goal.id] ?? []).map((m) => {
+                          const overdue = !m.completed && m.dueDate && isPast(parseISO(m.dueDate));
+                          return (
+                            <div key={m.id} className="flex items-start gap-2 py-1.5 group/m">
+                              <button
+                                onClick={() => toggleMilestone(m.id, goal.id, !m.completed)}
+                                className="flex-shrink-0 text-stone-400 hover:text-nude-500 transition-colors mt-0.5"
+                              >
+                                {m.completed
+                                  ? <CheckSquare className="w-4 h-4 text-sage-500" />
+                                  : <Square className="w-4 h-4" />}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <span className={`text-sm ${m.completed ? "line-through text-stone-400" : "text-stone-700"}`}>
+                                  {m.title}
+                                </span>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                  {m.dueDate && (
+                                    <span className={`text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded-full ${
+                                      overdue ? "text-red-500 bg-red-50" : "text-stone-400 bg-cream-50"
+                                    }`}>
+                                      <CalendarDays className="w-2.5 h-2.5" />
+                                      {format(parseISO(m.dueDate), "MMM d")}
+                                    </span>
+                                  )}
+                                  {m.reward && (
+                                    <span className="text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded-full text-amber-600 bg-amber-50">
+                                      <Gift className="w-2.5 h-2.5" /> {m.reward}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => deleteMilestone(m.id, goal.id)}
+                                className="opacity-0 group-hover/m:opacity-100 text-stone-300 hover:text-red-400 transition-all mt-0.5"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+
+                        {/* Add mini goal */}
+                        <div className="mt-3 space-y-2 bg-cream-50/60 rounded-lg p-2.5">
+                          <input
+                            type="text"
+                            value={getMilestoneInput(goal.id).title}
+                            onChange={(e) => setMilestoneInput((p) => ({ ...p, [goal.id]: { ...getMilestoneInput(goal.id), title: e.target.value } }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addMilestone(goal.id); }}}
+                            placeholder="Add a mini goal…"
+                            className="w-full text-sm border-b border-cream-200 focus:border-nude-300 focus:outline-none py-1 bg-transparent text-stone-700 placeholder:text-stone-300"
+                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={getMilestoneInput(goal.id).dueDate}
+                              onChange={(e) => setMilestoneInput((p) => ({ ...p, [goal.id]: { ...getMilestoneInput(goal.id), dueDate: e.target.value } }))}
+                              className="text-xs border border-cream-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-nude-300 bg-white text-stone-600"
+                            />
+                            <input
+                              type="text"
+                              value={getMilestoneInput(goal.id).reward}
+                              onChange={(e) => setMilestoneInput((p) => ({ ...p, [goal.id]: { ...getMilestoneInput(goal.id), reward: e.target.value } }))}
+                              placeholder="Reward (optional)"
+                              className="flex-1 text-xs border border-cream-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-nude-300 bg-white text-stone-600 placeholder:text-stone-300"
+                            />
+                            <button
+                              onClick={() => addMilestone(goal.id)}
+                              className="text-nude-500 hover:text-nude-700 transition-colors shrink-0"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

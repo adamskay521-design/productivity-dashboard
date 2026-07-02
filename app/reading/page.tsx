@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, BookOpen, Star, Loader2, X, Plus, Trash2 } from "lucide-react";
+import { Search, BookOpen, Star, Loader2, X, Plus, Trash2, Target, Pencil } from "lucide-react";
 import type { Book, BookStatus } from "@/lib/schema";
 import { BOOK_STATUS_META, BOOK_STATUSES } from "@/lib/schema";
 
@@ -72,6 +72,11 @@ export default function ReadingPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [yearGoal, setYearGoal] = useState<number | null>(null);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+
+  const currentYear = new Date().getFullYear();
 
   async function loadBooks() {
     const data = await fetch("/api/books").then((r) => r.json());
@@ -79,8 +84,24 @@ export default function ReadingPage() {
     setLoading(false);
   }
 
+  async function loadGoal() {
+    const data = await fetch(`/api/reading-goal?year=${currentYear}`).then((r) => r.json());
+    setYearGoal(data?.goalCount ?? null);
+  }
+
+  async function saveGoal(count: number) {
+    await fetch("/api/reading-goal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ year: currentYear, goalCount: count }),
+    });
+    setYearGoal(count);
+    setEditingGoal(false);
+  }
+
   useEffect(() => {
     loadBooks();
+    loadGoal();
   }, []);
 
   async function searchBooks(e: React.FormEvent) {
@@ -137,7 +158,7 @@ export default function ReadingPage() {
 
   async function updateBook(
     id: number,
-    updates: Partial<{ status: BookStatus; rating: number | null; notes: string }>
+    updates: Partial<{ status: BookStatus; rating: number | null; notes: string; totalPages: number; dateFinished: string | null }>
   ) {
     setSaving(true);
     await fetch(`/api/books/${id}`, {
@@ -332,6 +353,94 @@ export default function ReadingPage() {
         </div>
       )}
 
+      {/* Reading Stats */}
+      {(() => {
+        const thisYear = new Date().getFullYear();
+        const booksReadThisYear = books.filter(
+          (b) => b.status === "read" && b.dateFinished && b.dateFinished.startsWith(String(thisYear))
+        ).length;
+        const currentlyReading = books.filter((b) => b.status === "reading").length;
+        const rated = books.filter((b) => b.rating !== null);
+        const avgRating = rated.length > 0
+          ? (rated.reduce((s, b) => s + (b.rating ?? 0), 0) / rated.length).toFixed(1)
+          : null;
+        const goalPct = yearGoal && booksReadThisYear > 0 ? Math.min(100, Math.round((booksReadThisYear / yearGoal) * 100)) : 0;
+
+        return (
+          <div className="bg-white rounded-2xl border border-cream-200 shadow-sm p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-stone-400 font-semibold">{thisYear} Stats</p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {/* Books read this year / goal */}
+              <div>
+                <p className="text-2xl font-bold text-stone-900">{booksReadThisYear}</p>
+                <p className="text-xs text-stone-400 mt-0.5">books read</p>
+                {yearGoal && (
+                  <>
+                    <div className="mt-2 h-1.5 bg-cream-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-nude-500 transition-all" style={{ width: `${goalPct}%` }} />
+                    </div>
+                    <p className="text-[10px] text-stone-400 mt-1">of {yearGoal} goal ({goalPct}%)</p>
+                  </>
+                )}
+                {!yearGoal && (
+                  <button onClick={() => { setEditingGoal(true); setGoalInput(""); }}
+                    className="text-[10px] text-nude-400 hover:text-nude-600 mt-1 flex items-center gap-1">
+                    <Target className="w-3 h-3" /> Set a goal
+                  </button>
+                )}
+              </div>
+
+              {/* Goal input */}
+              {editingGoal && (
+                <div className="flex items-center gap-2 col-span-1">
+                  <input type="number" min="1" max="365" value={goalInput}
+                    onChange={(e) => setGoalInput(e.target.value)}
+                    placeholder="e.g. 24"
+                    className="w-20 border border-cream-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter" && goalInput) saveGoal(parseInt(goalInput)); }}
+                  />
+                  <button onClick={() => goalInput && saveGoal(parseInt(goalInput))}
+                    className="text-xs bg-nude-500 hover:bg-nude-600 text-white px-2 py-1 rounded-lg">Set</button>
+                  <button onClick={() => setEditingGoal(false)} className="text-stone-400 hover:text-stone-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
+              {yearGoal && !editingGoal && (
+                <div>
+                  <p className="text-2xl font-bold text-stone-900">{yearGoal}</p>
+                  <p className="text-xs text-stone-400 mt-0.5">book goal</p>
+                  <button onClick={() => { setEditingGoal(true); setGoalInput(String(yearGoal)); }}
+                    className="text-[10px] text-nude-400 hover:text-nude-600 mt-1 flex items-center gap-1">
+                    <Pencil className="w-3 h-3" /> Edit
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <p className="text-2xl font-bold text-stone-900">{currentlyReading}</p>
+                <p className="text-xs text-stone-400 mt-0.5">reading now</p>
+              </div>
+
+              {avgRating && (
+                <div>
+                  <p className="text-2xl font-bold text-stone-900">{avgRating}</p>
+                  <p className="text-xs text-stone-400 mt-0.5">avg rating</p>
+                  <div className="flex gap-0.5 mt-1">
+                    {[1,2,3,4,5].map((s) => (
+                      <Star key={s} className="w-2.5 h-2.5"
+                        fill={parseFloat(avgRating) >= s ? "#c9913a" : "none"}
+                        stroke={parseFloat(avgRating) >= s ? "#c9913a" : "#d4a872"} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Status tabs */}
       <div className="flex gap-1 bg-white rounded-lg border border-cream-200 p-1 shadow-sm mb-5 flex-wrap w-fit">
         {STATUS_TABS.map((s) => {
@@ -491,6 +600,34 @@ export default function ReadingPage() {
                 />
                 {expandedBook.rating && (
                   <span className="text-xs text-stone-400">{expandedBook.rating}/5</span>
+                )}
+              </div>
+
+              {/* Pages + date finished */}
+              <div className="flex gap-3 mb-3">
+                <div className="flex-1">
+                  <label className="text-xs text-stone-400 font-medium block mb-1">Total pages</label>
+                  <input
+                    type="number" min="0"
+                    defaultValue={expandedBook.totalPages || ""}
+                    placeholder="e.g. 320"
+                    onBlur={(e) => {
+                      const v = parseInt(e.target.value);
+                      if (!isNaN(v)) updateBook(expandedBook.id, { totalPages: v });
+                    }}
+                    className="w-full border border-cream-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                  />
+                </div>
+                {expandedBook.status === "read" && (
+                  <div className="flex-1">
+                    <label className="text-xs text-stone-400 font-medium block mb-1">Date finished</label>
+                    <input
+                      type="date"
+                      defaultValue={expandedBook.dateFinished ?? ""}
+                      onBlur={(e) => updateBook(expandedBook.id, { dateFinished: e.target.value || null })}
+                      className="w-full border border-cream-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                    />
+                  </div>
                 )}
               </div>
 

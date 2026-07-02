@@ -35,7 +35,13 @@ export async function POST(request: Request) {
 
     const [task] = await db
       .insert(tasks)
-      .values({ title: title.trim(), description, priority, dueDate, category: category || null })
+      .values({
+        title: title.trim(),
+        description,
+        priority,
+        dueDate: dueDate || null,
+        category: category || null,
+      })
       .returning();
 
     return NextResponse.json(task, { status: 201 });

@@ -1,12 +1,25 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { format } from "date-fns";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { format, parseISO } from "date-fns";
 import Link from "next/link";
-import { Plus, Trash2, X, Loader2, ExternalLink, ChevronLeft, FileText } from "lucide-react";
-import type { CrochetProject } from "@/lib/schema";
+import {
+  Plus, Trash2, X, Loader2, ExternalLink, ChevronLeft, FileText,
+  Minus, Upload, Images, LayoutGrid,
+} from "lucide-react";
+import type { CrochetProject, YarnStash, CraftType, NeedleType, ProjectJournalEntry, GaugeSwatch } from "@/lib/schema";
+import { CRAFT_TYPES, CRAFT_TYPE_META, NEEDLE_TYPES, NEEDLE_TYPE_META } from "@/lib/schema";
 
 type Status = "all" | "wishlist" | "in_progress" | "completed" | "frogged";
+
+function splitTags(s: string | null | undefined): string[] {
+  return (s || "").split(",").map(t => t.trim()).filter(Boolean);
+}
+
+const CRAFT_TABS: { label: string; value: "all" | CraftType }[] = [
+  { label: "All Crafts", value: "all" },
+  ...CRAFT_TYPES.map(c => ({ label: CRAFT_TYPE_META[c].label, value: c })),
+];
 
 const STATUS_META: Record<
   string,
@@ -29,11 +42,15 @@ const TABS: { label: string; value: Status }[] = [
 const EMPTY_FORM = {
   name: "",
   status: "wishlist" as CrochetProject["status"],
+  craftType: "crochet" as CraftType,
   patternName: "",
   patternUrl: "",
   yarnBrand: "",
   yarnColor: "",
   hookSize: "",
+  needleSize: "",
+  needleType: "" as NeedleType | "",
+  tags: "",
   notes: "",
   progressPercent: 0,
   imageUrl: "",
@@ -77,6 +94,27 @@ export default function CrochetPage() {
   const [editing, setEditing] = useState<CrochetProject | null>(null);
   const [editForm, setEditForm] = useState<Partial<CrochetProject>>({});
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [stashYarns, setStashYarns] = useState<YarnStash[]>([]);
+  const [projectUsage, setProjectUsage] = useState<{
+    id: number; yarnId: number; skeinsUsed: number; dateUsed: string; notes: string;
+    yarnName: string | null; yarnBrand: string | null; yarnColorway: string | null; yarnColorHex: string | null;
+  }[]>([]);
+  const [usageForm, setUsageForm] = useState({ yarnId: "", skeinsUsed: "1", dateUsed: format(new Date(), "yyyy-MM-dd"), notes: "" });
+  const [usageSaving, setUsageSaving] = useState(false);
+
+  const [journalEntries, setJournalEntries] = useState<ProjectJournalEntry[]>([]);
+  const [journalForm, setJournalForm] = useState({ entryDate: format(new Date(), "yyyy-MM-dd"), content: "", photoUrl: "", minutesSpent: "" });
+  const [journalSaving, setJournalSaving] = useState(false);
+  const [journalUploading, setJournalUploading] = useState(false);
+  const journalFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [gaugeSwatchList, setGaugeSwatchList] = useState<GaugeSwatch[]>([]);
+  const [gaugeForm, setGaugeForm] = useState({ swatchDate: format(new Date(), "yyyy-MM-dd"), stitchesPer4In: "", rowsPer4In: "", hookNeedleSize: "", notes: "" });
+  const [gaugeSaving, setGaugeSaving] = useState(false);
+
+  const [craftTab, setCraftTab] = useState<"all" | CraftType>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "gallery">("list");
 
   // ref always holds the latest form values so the auto-save timeout never reads stale state
   const editFormRef = useRef<Partial<CrochetProject>>({});
@@ -84,14 +122,41 @@ export default function CrochetPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
   async function load() {
-    const data = await fetch("/api/crochet").then((r) => r.json());
-    setProjects(Array.isArray(data) ? data : []);
+    const [projectData, stashData] = await Promise.all([
+      fetch("/api/crochet").then(r => r.json()),
+      fetch("/api/yarn-stash").then(r => r.json()),
+    ]);
+    setProjects(Array.isArray(projectData) ? projectData : []);
+    setStashYarns(Array.isArray(stashData) ? stashData : []);
     setLoading(false);
   }
 
+  const loadProjectUsage = useCallback(async (projectId: number) => {
+    const data = await fetch(`/api/yarn-usage?projectId=${projectId}`).then(r => r.json());
+    setProjectUsage(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadJournalEntries = useCallback(async (projectId: number) => {
+    const data = await fetch(`/api/journal-entries?projectId=${projectId}`).then(r => r.json());
+    setJournalEntries(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadGaugeSwatches = useCallback(async (projectId: number) => {
+    const data = await fetch(`/api/gauge-swatches?projectId=${projectId}`).then(r => r.json());
+    setGaugeSwatchList(Array.isArray(data) ? data : []);
+  }, []);
+
   useEffect(() => { load(); }, []);
 
-  const filtered = tab === "all" ? projects : projects.filter((p) => p.status === tab);
+  const allTags = Array.from(new Set(projects.flatMap(p => splitTags(p.tags)))).sort();
+
+  const filtered = projects.filter(p =>
+    (tab === "all" || p.status === tab) &&
+    (craftTab === "all" || p.craftType === craftTab) &&
+    (!tagFilter || splitTags(p.tags).includes(tagFilter))
+  );
+
+  const galleryProjects = projects.filter(p => p.status === "completed");
 
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
@@ -114,6 +179,78 @@ export default function CrochetPage() {
     setEditForm(initial);
     setEditing(project);
     setSaveStatus("idle");
+    setUsageForm({ yarnId: "", skeinsUsed: "1", dateUsed: format(new Date(), "yyyy-MM-dd"), notes: "" });
+    setJournalForm({ entryDate: format(new Date(), "yyyy-MM-dd"), content: "", photoUrl: "", minutesSpent: "" });
+    setGaugeForm({ swatchDate: format(new Date(), "yyyy-MM-dd"), stitchesPer4In: "", rowsPer4In: "", hookNeedleSize: "", notes: "" });
+    loadProjectUsage(project.id);
+    loadJournalEntries(project.id);
+    loadGaugeSwatches(project.id);
+  }
+
+  async function uploadJournalPhoto(file: File) {
+    setJournalUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("folder", "journal");
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    setJournalUploading(false);
+    if (data.url) setJournalForm(f => ({ ...f, photoUrl: data.url }));
+    else alert(data.error || "Upload failed. Paste an image URL instead.");
+  }
+
+  async function addJournalEntry(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    if (!journalForm.content.trim() && !journalForm.photoUrl.trim()) return;
+    setJournalSaving(true);
+    await fetch("/api/journal-entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: editing.id,
+        entryDate: journalForm.entryDate,
+        content: journalForm.content,
+        photoUrl: journalForm.photoUrl,
+        minutesSpent: journalForm.minutesSpent ? parseInt(journalForm.minutesSpent) : null,
+      }),
+    });
+    setJournalForm({ entryDate: format(new Date(), "yyyy-MM-dd"), content: "", photoUrl: "", minutesSpent: "" });
+    setJournalSaving(false);
+    loadJournalEntries(editing.id);
+  }
+
+  async function deleteJournalEntry(id: number) {
+    if (!editing) return;
+    await fetch(`/api/journal-entries/${id}`, { method: "DELETE" });
+    loadJournalEntries(editing.id);
+  }
+
+  async function addGaugeSwatch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setGaugeSaving(true);
+    await fetch("/api/gauge-swatches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: editing.id,
+        swatchDate: gaugeForm.swatchDate,
+        stitchesPer4In: gaugeForm.stitchesPer4In ? parseInt(gaugeForm.stitchesPer4In) : null,
+        rowsPer4In: gaugeForm.rowsPer4In ? parseInt(gaugeForm.rowsPer4In) : null,
+        hookNeedleSize: gaugeForm.hookNeedleSize,
+        notes: gaugeForm.notes,
+      }),
+    });
+    setGaugeForm({ swatchDate: format(new Date(), "yyyy-MM-dd"), stitchesPer4In: "", rowsPer4In: "", hookNeedleSize: "", notes: "" });
+    setGaugeSaving(false);
+    loadGaugeSwatches(editing.id);
+  }
+
+  async function deleteGaugeSwatch(id: number) {
+    if (!editing) return;
+    await fetch(`/api/gauge-swatches/${id}`, { method: "DELETE" });
+    loadGaugeSwatches(editing.id);
   }
 
   function handleEditChange(field: keyof CrochetProject, value: string | number) {
@@ -202,8 +339,22 @@ export default function CrochetPage() {
               placeholder="Project name"
             />
 
-            {/* Status + progress */}
+            {/* Craft type + Status + progress */}
             <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
+                  Craft
+                </label>
+                <select
+                  value={editForm.craftType || "crochet"}
+                  onChange={(e) => handleEditChange("craftType", e.target.value)}
+                  className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm bg-cream-50 focus:outline-none focus:ring-2 focus:ring-nude-300"
+                >
+                  {CRAFT_TYPES.map(c => (
+                    <option key={c} value={c}>{CRAFT_TYPE_META[c].label}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex-1">
                 <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
                   Status
@@ -234,6 +385,30 @@ export default function CrochetPage() {
                   />
                 </div>
               )}
+            </div>
+
+            {/* Row / Round counter */}
+            <div className="flex items-center justify-between bg-cream-50 border border-cream-200 rounded-xl px-4 py-3">
+              <span className="text-xs font-semibold text-stone-400 uppercase tracking-wide">
+                {editForm.craftType === "knitting" ? "Round" : "Row"}
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleEditChange("currentRow", Math.max(0, (editForm.currentRow ?? 0) - 1))}
+                  className="w-7 h-7 flex items-center justify-center rounded-full border border-cream-300 text-stone-500 hover:bg-cream-100 transition-colors"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-lg font-semibold text-stone-800 w-8 text-center">{editForm.currentRow ?? 0}</span>
+                <button
+                  type="button"
+                  onClick={() => handleEditChange("currentRow", (editForm.currentRow ?? 0) + 1)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full border border-cream-300 text-stone-500 hover:bg-cream-100 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* Pattern */}
@@ -278,8 +453,8 @@ export default function CrochetPage() {
               )}
             </div>
 
-            {/* Yarn + hook */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Yarn + hook/needle */}
+            <div className={`grid gap-4 ${editForm.craftType === "knitting" ? "grid-cols-4" : "grid-cols-3"}`}>
               <div>
                 <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
                   Yarn Brand
@@ -304,18 +479,50 @@ export default function CrochetPage() {
                   className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
                 />
               </div>
-              <div>
-                <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
-                  Hook Size
-                </label>
-                <input
-                  type="text"
-                  value={editForm.hookSize || ""}
-                  onChange={(e) => handleEditChange("hookSize", e.target.value)}
-                  placeholder="5mm / H-8..."
-                  className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
-                />
-              </div>
+              {editForm.craftType === "knitting" ? (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
+                      Needle Size
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.needleSize || ""}
+                      onChange={(e) => handleEditChange("needleSize", e.target.value)}
+                      placeholder="US 7 / 4.5mm..."
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
+                      Needle Type
+                    </label>
+                    <select
+                      value={editForm.needleType || ""}
+                      onChange={(e) => handleEditChange("needleType", e.target.value)}
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                    >
+                      <option value="">—</option>
+                      {NEEDLE_TYPES.map(nt => (
+                        <option key={nt} value={nt}>{NEEDLE_TYPE_META[nt].label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
+                    Hook Size
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.hookSize || ""}
+                    onChange={(e) => handleEditChange("hookSize", e.target.value)}
+                    placeholder="5mm / H-8..."
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Image URL */}
@@ -340,10 +547,33 @@ export default function CrochetPage() {
               <textarea
                 value={editForm.notes || ""}
                 onChange={(e) => handleEditChange("notes", e.target.value)}
-                placeholder="Row counts, modifications, where you left off..."
+                placeholder="Modifications, where you left off..."
                 rows={4}
                 className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 resize-none bg-white leading-relaxed"
               />
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="text-xs font-semibold text-stone-400 uppercase tracking-wide block mb-1">
+                Tags
+              </label>
+              <input
+                type="text"
+                value={editForm.tags || ""}
+                onChange={(e) => handleEditChange("tags", e.target.value)}
+                placeholder="sweater, gift, amigurumi..."
+                className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+              />
+              {splitTags(editForm.tags).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {splitTags(editForm.tags).map(t => (
+                    <span key={t} className="text-xs font-medium px-2 py-0.5 rounded-full bg-nude-50 text-nude-700 border border-nude-100">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -362,6 +592,313 @@ export default function CrochetPage() {
               )}
             </span>
           </div>
+
+          {/* Journal */}
+          <div className="px-6 pb-6 pt-2 border-t border-cream-100">
+            <h3 className="text-sm font-semibold text-stone-600 mt-4 mb-3">Journal</h3>
+            {journalEntries.length === 0 ? (
+              <p className="text-sm text-stone-400 mb-4">No journal entries yet.</p>
+            ) : (
+              <div className="space-y-2 mb-4">
+                {journalEntries.map(entry => (
+                  <div key={entry.id} className="flex items-start gap-3 rounded-xl px-3 py-2.5 group border border-cream-100 bg-cream-50">
+                    {entry.photoUrl && (
+                      <img src={entry.photoUrl} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-stone-400">
+                        {format(parseISO(entry.entryDate), "MMM d, yyyy")}
+                        {entry.minutesSpent != null && ` · ${entry.minutesSpent} min`}
+                      </p>
+                      {entry.content && (
+                        <p className="text-sm text-stone-700 whitespace-pre-wrap">{entry.content}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => deleteJournalEntry(entry.id)}
+                      className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-400 transition-all flex-shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={addJournalEntry} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-stone-500 mb-1 block">Date</label>
+                  <input
+                    type="date"
+                    value={journalForm.entryDate}
+                    onChange={e => setJournalForm(f => ({ ...f, entryDate: e.target.value }))}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-stone-500 mb-1 block">Minutes spent (optional)</label>
+                  <input
+                    type="number" min="0"
+                    value={journalForm.minutesSpent}
+                    onChange={e => setJournalForm(f => ({ ...f, minutesSpent: e.target.value }))}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                  />
+                </div>
+              </div>
+              <textarea
+                value={journalForm.content}
+                onChange={e => setJournalForm(f => ({ ...f, content: e.target.value }))}
+                placeholder="Row counts, what you worked on, where you left off..."
+                rows={2}
+                className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 resize-none bg-white"
+              />
+              <div className="flex items-center gap-3">
+                <input
+                  ref={journalFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => e.target.files?.[0] && uploadJournalPhoto(e.target.files[0])}
+                />
+                <button
+                  type="button"
+                  onClick={() => journalFileInputRef.current?.click()}
+                  disabled={journalUploading}
+                  className="flex items-center gap-1.5 border border-cream-300 rounded-lg px-3 py-2 text-sm text-stone-500 hover:bg-cream-50 transition-colors"
+                >
+                  {journalUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  Photo
+                </button>
+                {journalForm.photoUrl && (
+                  <img src={journalForm.photoUrl} alt="preview" className="w-10 h-10 rounded-lg object-cover" />
+                )}
+                <button
+                  type="submit"
+                  disabled={journalSaving || (!journalForm.content.trim() && !journalForm.photoUrl.trim())}
+                  className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors ml-auto"
+                >
+                  {journalSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Add Entry
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Gauge Swatches */}
+          <div className="px-6 pb-6 pt-2 border-t border-cream-100">
+            <h3 className="text-sm font-semibold text-stone-600 mt-4 mb-3">Gauge Swatches</h3>
+            {gaugeSwatchList.length === 0 ? (
+              <p className="text-sm text-stone-400 mb-4">No gauge swatches logged yet.</p>
+            ) : (
+              <div className="space-y-2 mb-4">
+                {gaugeSwatchList.map(sw => (
+                  <div key={sw.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 group border border-cream-100 bg-cream-50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-stone-700">
+                        {sw.stitchesPer4In != null && `${sw.stitchesPer4In} sts`}
+                        {sw.stitchesPer4In != null && sw.rowsPer4In != null && " × "}
+                        {sw.rowsPer4In != null && `${sw.rowsPer4In} rows`}
+                        {(sw.stitchesPer4In != null || sw.rowsPer4In != null) && " per 4in"}
+                        {sw.hookNeedleSize && <span className="text-stone-400 font-normal"> · {sw.hookNeedleSize}</span>}
+                      </p>
+                      <p className="text-xs text-stone-400">
+                        {format(parseISO(sw.swatchDate), "MMM d, yyyy")}{sw.notes && ` · ${sw.notes}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteGaugeSwatch(sw.id)}
+                      className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-400 transition-all"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={addGaugeSwatch} className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-stone-500 mb-1 block">Date</label>
+                  <input
+                    type="date"
+                    value={gaugeForm.swatchDate}
+                    onChange={e => setGaugeForm(f => ({ ...f, swatchDate: e.target.value }))}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-stone-500 mb-1 block">Stitches / 4in</label>
+                  <input
+                    type="number" min="0"
+                    value={gaugeForm.stitchesPer4In}
+                    onChange={e => setGaugeForm(f => ({ ...f, stitchesPer4In: e.target.value }))}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-stone-500 mb-1 block">Rows / 4in</label>
+                  <input
+                    type="number" min="0"
+                    value={gaugeForm.rowsPer4In}
+                    onChange={e => setGaugeForm(f => ({ ...f, rowsPer4In: e.target.value }))}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Hook/needle size used"
+                  value={gaugeForm.hookNeedleSize}
+                  onChange={e => setGaugeForm(f => ({ ...f, hookNeedleSize: e.target.value }))}
+                  className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                />
+                <input
+                  type="text"
+                  placeholder="Note (optional)"
+                  value={gaugeForm.notes}
+                  onChange={e => setGaugeForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                />
+              </div>
+              <button
+                type="submit" disabled={gaugeSaving}
+                className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                {gaugeSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Log Swatch
+              </button>
+            </form>
+          </div>
+
+          {/* Yarn from Stash */}
+          <div className="px-6 pb-6 pt-2 border-t border-cream-100">
+            <h3 className="text-sm font-semibold text-stone-600 mt-4 mb-3">Yarn from Stash</h3>
+            {projectUsage.length === 0 ? (
+              <p className="text-sm text-stone-400 mb-4">No stash yarn linked yet.</p>
+            ) : (
+              <div className="space-y-2 mb-4">
+                {projectUsage.map(u => (
+                  <div key={u.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 group border border-cream-100 bg-cream-50">
+                    <div
+                      className="w-4 h-4 rounded-full flex-shrink-0 border border-white/60 shadow-sm"
+                      style={{ backgroundColor: u.yarnColorHex || "#c8a882" }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-stone-700 truncate">
+                        {u.yarnName || "Unknown yarn"}
+                        {u.yarnBrand && <span className="text-stone-400 font-normal"> · {u.yarnBrand}</span>}
+                      </p>
+                      <p className="text-xs text-stone-400">
+                        {u.skeinsUsed} skein{u.skeinsUsed !== 1 ? "s" : ""} · {format(parseISO(u.dateUsed), "MMM d, yyyy")}
+                        {u.notes && ` · ${u.notes}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await fetch(`/api/yarn-usage/${u.id}`, { method: "DELETE" });
+                        loadProjectUsage(editing.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-400 transition-all"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {stashYarns.length > 0 && (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!usageForm.yarnId) return;
+                  setUsageSaving(true);
+                  await fetch("/api/yarn-usage", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      yarnId: parseInt(usageForm.yarnId),
+                      projectId: editing.id,
+                      skeinsUsed: parseFloat(usageForm.skeinsUsed) || 1,
+                      dateUsed: usageForm.dateUsed,
+                      notes: usageForm.notes,
+                    }),
+                  });
+                  setUsageForm({ yarnId: "", skeinsUsed: "1", dateUsed: format(new Date(), "yyyy-MM-dd"), notes: "" });
+                  setUsageSaving(false);
+                  loadProjectUsage(editing.id);
+                  const stashData = await fetch("/api/yarn-stash").then(r => r.json());
+                  setStashYarns(Array.isArray(stashData) ? stashData : []);
+                }}
+                className="space-y-3"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-stone-500 mb-1 block">Select yarn from stash</label>
+                    <select
+                      value={usageForm.yarnId}
+                      onChange={e => setUsageForm(f => ({ ...f, yarnId: e.target.value }))}
+                      required
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                    >
+                      <option value="">Choose yarn…</option>
+                      {stashYarns.map(y => (
+                        <option key={y.id} value={y.id}>
+                          {y.name}{y.colorway ? ` (${y.colorway})` : ""} — {y.skeinsRemaining} left
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-stone-500 mb-1 block">Skeins used</label>
+                    <input
+                      type="number" min="0.1" step="0.5" required
+                      value={usageForm.skeinsUsed}
+                      onChange={e => setUsageForm(f => ({ ...f, skeinsUsed: e.target.value }))}
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-stone-500 mb-1 block">Date used</label>
+                    <input
+                      type="date" required
+                      value={usageForm.dateUsed}
+                      onChange={e => setUsageForm(f => ({ ...f, dateUsed: e.target.value }))}
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-stone-500 mb-1 block">Note (optional)</label>
+                    <input
+                      type="text"
+                      value={usageForm.notes}
+                      onChange={e => setUsageForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Body, sleeves..."
+                      className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit" disabled={usageSaving || !usageForm.yarnId}
+                  className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                >
+                  {usageSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Mark yarn used
+                </button>
+              </form>
+            )}
+
+            {stashYarns.length === 0 && (
+              <p className="text-sm text-stone-400">
+                <a href="/yarn-stash" className="text-nude-500 hover:underline">Add yarn to your stash</a> to link it here.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -371,18 +908,36 @@ export default function CrochetPage() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-stone-900">Crochet Projects</h1>
+          <h1 className="text-2xl font-semibold text-stone-900">Crochet & Knitting</h1>
           <p className="text-stone-400 text-sm mt-0.5">
             {projects.length} project{projects.length !== 1 ? "s" : ""} ·{" "}
             {projects.filter((p) => p.status === "in_progress").length} in progress
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" /> New Project
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-white rounded-lg border border-cream-200 p-1 shadow-sm">
+            <button
+              onClick={() => setViewMode("list")}
+              title="Project list"
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-nude-500 text-white" : "text-stone-400 hover:text-stone-600 hover:bg-cream-100"}`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("gallery")}
+              title="Finished object gallery"
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "gallery" ? "bg-nude-500 text-white" : "text-stone-400 hover:text-stone-600 hover:bg-cream-100"}`}
+            >
+              <Images className="w-4 h-4" />
+            </button>
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Project
+          </button>
+        </div>
       </div>
 
       {/* New project form */}
@@ -405,6 +960,15 @@ export default function CrochetPage() {
                 autoFocus
                 required
               />
+              <select
+                value={form.craftType}
+                onChange={(e) => setForm({ ...form, craftType: e.target.value as CraftType })}
+                className="border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+              >
+                {CRAFT_TYPES.map(c => (
+                  <option key={c} value={c}>{CRAFT_TYPE_META[c].label}</option>
+                ))}
+              </select>
               <select
                 value={form.status}
                 onChange={(e) =>
@@ -433,14 +997,43 @@ export default function CrochetPage() {
                 onChange={(e) => setForm({ ...form, yarnBrand: e.target.value })}
                 className="border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
               />
-              <input
-                type="text"
-                placeholder="Hook size (e.g. 5mm)"
-                value={form.hookSize}
-                onChange={(e) => setForm({ ...form, hookSize: e.target.value })}
-                className="border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
-              />
+              {form.craftType === "knitting" ? (
+                <input
+                  type="text"
+                  placeholder="Needle size (e.g. US 7)"
+                  value={form.needleSize}
+                  onChange={(e) => setForm({ ...form, needleSize: e.target.value })}
+                  className="border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Hook size (e.g. 5mm)"
+                  value={form.hookSize}
+                  onChange={(e) => setForm({ ...form, hookSize: e.target.value })}
+                  className="border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                />
+              )}
             </div>
+            {form.craftType === "knitting" && (
+              <select
+                value={form.needleType}
+                onChange={(e) => setForm({ ...form, needleType: e.target.value as NeedleType | "" })}
+                className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+              >
+                <option value="">Needle type (optional)</option>
+                {NEEDLE_TYPES.map(nt => (
+                  <option key={nt} value={nt}>{NEEDLE_TYPE_META[nt].label}</option>
+                ))}
+              </select>
+            )}
+            <input
+              type="text"
+              placeholder="Tags (comma separated)"
+              value={form.tags}
+              onChange={(e) => setForm({ ...form, tags: e.target.value })}
+              className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+            />
             <div className="flex gap-2 pt-1">
               <button
                 type="submit"
@@ -484,132 +1077,256 @@ export default function CrochetPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-5 bg-white rounded-lg border border-cream-200 p-1 w-fit shadow-sm flex-wrap">
-        {TABS.map(({ label, value }) => {
-          const count =
-            value === "all"
-              ? projects.length
-              : projects.filter((p) => p.status === value).length;
-          return (
-            <button
-              key={value}
-              onClick={() => setTab(value)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                tab === value
-                  ? "bg-nude-500 text-white"
-                  : "text-stone-500 hover:text-stone-700 hover:bg-cream-100"
-              }`}
-            >
-              {label}
-              <span className="ml-1.5 text-xs opacity-70">{count}</span>
-            </button>
-          );
-        })}
-      </div>
+      {viewMode === "list" ? (
+        <>
+          {/* Status tabs */}
+          <div className="flex gap-1 mb-3 bg-white rounded-lg border border-cream-200 p-1 w-fit shadow-sm flex-wrap">
+            {TABS.map(({ label, value }) => {
+              const count =
+                value === "all"
+                  ? projects.length
+                  : projects.filter((p) => p.status === value).length;
+              return (
+                <button
+                  key={value}
+                  onClick={() => setTab(value)}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                    tab === value
+                      ? "bg-nude-500 text-white"
+                      : "text-stone-500 hover:text-stone-700 hover:bg-cream-100"
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1.5 text-xs opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-stone-300">
-          <Loader2 className="w-6 h-6 animate-spin" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-cream-200 shadow-sm py-16 text-center">
-          <div className="text-5xl mb-3">🧶</div>
-          <p className="text-stone-400 text-sm">No projects here yet.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((project) => {
-            const meta = STATUS_META[project.status];
-            return (
-              <div
-                key={project.id}
-                onClick={() => openEdit(project)}
-                className="bg-white rounded-2xl border border-cream-200 shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
-              >
-                {/* Image */}
-                <div className="h-40 relative">
-                  {project.imageUrl ? (
-                    <img
-                      src={project.imageUrl}
-                      alt={project.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <YarnPlaceholder status={project.status} />
-                  )}
-                  <div className="absolute top-2.5 right-2.5">
-                    <StatusBadge status={project.status} />
-                  </div>
-                </div>
+          {/* Craft type tabs */}
+          <div className="flex gap-1 mb-3 bg-white rounded-lg border border-cream-200 p-1 w-fit shadow-sm flex-wrap">
+            {CRAFT_TABS.map(({ label, value }) => {
+              const count =
+                value === "all" ? projects.length : projects.filter((p) => p.craftType === value).length;
+              return (
+                <button
+                  key={value}
+                  onClick={() => setCraftTab(value)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                    craftTab === value
+                      ? "bg-nude-500 text-white"
+                      : "text-stone-500 hover:text-stone-700 hover:bg-cream-100"
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1 opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
 
-                {/* Content */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-stone-800 text-sm mb-2 line-clamp-1">
-                    {project.name}
-                  </h3>
+          {/* Tag filter chips */}
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-5">
+              {allTags.map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTagFilter(tagFilter === t ? null : t)}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                    tagFilter === t
+                      ? "bg-nude-500 border-nude-500 text-white"
+                      : "bg-white border-cream-200 text-stone-500 hover:border-nude-200"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
 
-                  <div className="space-y-1 text-xs text-stone-400">
-                    {project.patternName && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-stone-500">Pattern:</span>
-                        <span className="truncate">{project.patternName}</span>
-                        {project.patternUrl && (
-                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-stone-300">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-cream-200 shadow-sm py-16 text-center">
+              <div className="text-5xl mb-3">🧶</div>
+              <p className="text-stone-400 text-sm">No projects here yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((project) => {
+                const meta = STATUS_META[project.status];
+                const projectTags = splitTags(project.tags);
+                return (
+                  <div
+                    key={project.id}
+                    onClick={() => openEdit(project)}
+                    className="bg-white rounded-2xl border border-cream-200 shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+                  >
+                    {/* Image */}
+                    <div className="h-40 relative">
+                      {project.imageUrl ? (
+                        <img
+                          src={project.imageUrl}
+                          alt={project.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <YarnPlaceholder status={project.status} />
+                      )}
+                      <div className="absolute top-2.5 right-2.5 flex gap-1.5">
+                        <span
+                          className="text-[10px] font-semibold px-2 py-1 rounded-full text-white"
+                          style={{ backgroundColor: CRAFT_TYPE_META[project.craftType as CraftType]?.color }}
+                        >
+                          {CRAFT_TYPE_META[project.craftType as CraftType]?.label}
+                        </span>
+                        <StatusBadge status={project.status} />
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-4">
+                      <h3 className="font-semibold text-stone-800 text-sm mb-2 line-clamp-1">
+                        {project.name}
+                      </h3>
+
+                      <div className="space-y-1 text-xs text-stone-400">
+                        {project.patternName && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-stone-500">Pattern:</span>
+                            <span className="truncate">{project.patternName}</span>
+                            {project.patternUrl && (
+                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                            )}
+                          </div>
+                        )}
+                        {(project.yarnBrand || project.yarnColor) && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-stone-500">Yarn:</span>
+                            <span className="truncate">
+                              {[project.yarnBrand, project.yarnColor].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                        )}
+                        {project.craftType === "knitting" ? (
+                          project.needleSize && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-stone-500">Needle:</span>
+                              <span>
+                                {project.needleSize}
+                                {project.needleType && ` (${NEEDLE_TYPE_META[project.needleType as NeedleType].label})`}
+                              </span>
+                            </div>
+                          )
+                        ) : (
+                          project.hookSize && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-stone-500">Hook:</span>
+                              <span>{project.hookSize}</span>
+                            </div>
+                          )
+                        )}
+                        {project.currentRow > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-stone-500">
+                              {project.craftType === "knitting" ? "Round:" : "Row:"}
+                            </span>
+                            <span>{project.currentRow}</span>
+                          </div>
                         )}
                       </div>
-                    )}
-                    {(project.yarnBrand || project.yarnColor) && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-stone-500">Yarn:</span>
-                        <span className="truncate">
-                          {[project.yarnBrand, project.yarnColor].filter(Boolean).join(" · ")}
-                        </span>
-                      </div>
-                    )}
-                    {project.hookSize && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-stone-500">Hook:</span>
-                        <span>{project.hookSize}</span>
-                      </div>
-                    )}
+
+                      {/* Progress bar */}
+                      {(project.status === "in_progress" || project.status === "completed") &&
+                        (project.progressPercent ?? 0) > 0 && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-stone-400">Progress</span>
+                              <span
+                                className="text-xs font-semibold"
+                                style={{ color: meta.textColor }}
+                              >
+                                {project.progressPercent}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-cream-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${project.progressPercent}%`,
+                                  backgroundColor: meta.color,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                      {projectTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2.5">
+                          {projectTags.slice(0, 3).map(t => (
+                            <span key={t} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-nude-50 text-nude-700 border border-nude-100">
+                              {t}
+                            </span>
+                          ))}
+                          {projectTags.length > 3 && (
+                            <span className="text-[10px] text-stone-400">+{projectTags.length - 3} more</span>
+                          )}
+                        </div>
+                      )}
+
+                      {project.notes && (
+                        <p className="text-xs text-stone-400 mt-2 line-clamp-2 leading-relaxed">
+                          {project.notes}
+                        </p>
+                      )}
+                    </div>
                   </div>
-
-                  {/* Progress bar */}
-                  {(project.status === "in_progress" || project.status === "completed") &&
-                    (project.progressPercent ?? 0) > 0 && (
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-stone-400">Progress</span>
-                          <span
-                            className="text-xs font-semibold"
-                            style={{ color: meta.textColor }}
-                          >
-                            {project.progressPercent}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-cream-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${project.progressPercent}%`,
-                              backgroundColor: meta.color,
-                            }}
-                          />
-                        </div>
-                      </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Finished Object Gallery */}
+          {galleryProjects.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-cream-200 shadow-sm py-16 text-center">
+              <div className="text-5xl mb-3">🎉</div>
+              <p className="text-stone-400 text-sm">No finished objects yet — completed projects will show up here.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {galleryProjects.map(project => (
+                <div
+                  key={project.id}
+                  onClick={() => openEdit(project)}
+                  className="bg-white rounded-2xl border border-cream-200 shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+                >
+                  <div className="aspect-square relative">
+                    {project.imageUrl ? (
+                      <img src={project.imageUrl} alt={project.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <YarnPlaceholder status={project.status} />
                     )}
-
-                  {project.notes && (
-                    <p className="text-xs text-stone-400 mt-2 line-clamp-2 leading-relaxed">
-                      {project.notes}
-                    </p>
-                  )}
+                    <div className="absolute top-2 right-2">
+                      <span
+                        className="text-[10px] font-semibold px-2 py-1 rounded-full text-white"
+                        style={{ backgroundColor: CRAFT_TYPE_META[project.craftType as CraftType]?.color }}
+                      >
+                        {CRAFT_TYPE_META[project.craftType as CraftType]?.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h3 className="font-semibold text-stone-800 text-sm line-clamp-1">{project.name}</h3>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

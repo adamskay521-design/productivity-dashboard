@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { title, category, quarter, year, description } = body;
+    const { title, category, quarter, year, description, measurable, targetDate, reward } = body;
     if (!title?.trim() || !quarter || !year) {
       return NextResponse.json({ error: "title, quarter, year required" }, { status: 400 });
     }
@@ -41,6 +41,9 @@ export async function POST(request: Request) {
         quarter,
         year,
         description: description || "",
+        measurable: measurable || "",
+        targetDate: targetDate || null,
+        reward: reward || "",
         status: "active",
         progressPercent: 0,
       })

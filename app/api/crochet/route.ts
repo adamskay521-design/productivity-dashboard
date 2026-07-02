@@ -16,7 +16,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, status, patternName, patternUrl, yarnBrand, yarnColor, hookSize, notes, progressPercent, imageUrl } = body;
+    const {
+      name, status, craftType, patternName, patternUrl, yarnBrand, yarnColor,
+      hookSize, needleSize, needleType, currentRow, tags, notes, progressPercent, imageUrl,
+    } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -27,11 +30,16 @@ export async function POST(request: Request) {
       .values({
         name: name.trim(),
         status: status || "wishlist",
+        craftType: craftType || "crochet",
         patternName,
         patternUrl,
         yarnBrand,
         yarnColor,
         hookSize,
+        needleSize,
+        needleType: needleType || null,
+        currentRow: currentRow ?? 0,
+        tags: tags ?? "",
         notes,
         progressPercent: progressPercent ?? 0,
         imageUrl,

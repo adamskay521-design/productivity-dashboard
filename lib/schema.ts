@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, date, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, date, boolean, real, numeric } from "drizzle-orm/pg-core";
 
 export const TASK_CATEGORIES = [
   "house",
@@ -61,20 +61,90 @@ export const notes = pgTable("notes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const CRAFT_TYPES = ["crochet", "knitting"] as const;
+export type CraftType = (typeof CRAFT_TYPES)[number];
+
+export const CRAFT_TYPE_META: Record<CraftType, { label: string; color: string }> = {
+  crochet:  { label: "Crochet",  color: "#c9888c" },
+  knitting: { label: "Knitting", color: "#7c9cba" },
+};
+
+export const NEEDLE_TYPES = ["straight", "circular", "dpn"] as const;
+export type NeedleType = (typeof NEEDLE_TYPES)[number];
+
+export const NEEDLE_TYPE_META: Record<NeedleType, { label: string }> = {
+  straight: { label: "Straight" },
+  circular: { label: "Circular" },
+  dpn:      { label: "Double-Pointed (DPN)" },
+};
+
 export const crochetProjects = pgTable("crochet_projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   status: text("status", { enum: ["wishlist", "in_progress", "completed", "frogged"] })
     .default("wishlist")
     .notNull(),
+  craftType: text("craft_type", { enum: CRAFT_TYPES }).default("crochet").notNull(),
   patternName: text("pattern_name").default(""),
   patternUrl: text("pattern_url").default(""),
   yarnBrand: text("yarn_brand").default(""),
   yarnColor: text("yarn_color").default(""),
   hookSize: text("hook_size").default(""),
+  needleSize: text("needle_size").default(""),
+  needleType: text("needle_type", { enum: NEEDLE_TYPES }),
+  currentRow: integer("current_row").default(0).notNull(),
+  tags: text("tags").default("").notNull(),
   notes: text("notes").default(""),
   progressPercent: integer("progress_percent").default(0),
   imageUrl: text("image_url").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const projectJournalEntries = pgTable("project_journal_entries", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .references(() => crochetProjects.id, { onDelete: "cascade" })
+    .notNull(),
+  entryDate: date("entry_date").notNull(),
+  content: text("content").default("").notNull(),
+  photoUrl: text("photo_url").default("").notNull(),
+  minutesSpent: integer("minutes_spent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const gaugeSwatches = pgTable("gauge_swatches", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .references(() => crochetProjects.id, { onDelete: "cascade" })
+    .notNull(),
+  swatchDate: date("swatch_date").notNull(),
+  stitchesPer4In: integer("stitches_per_4in"),
+  rowsPer4In: integer("rows_per_4in"),
+  hookNeedleSize: text("hook_needle_size").default("").notNull(),
+  notes: text("notes").default("").notNull(),
+  imageUrl: text("image_url").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const TOOL_TYPES = ["hook", "needle"] as const;
+export type ToolType = (typeof TOOL_TYPES)[number];
+
+export const TOOL_TYPE_META: Record<ToolType, { label: string }> = {
+  hook:   { label: "Hook" },
+  needle: { label: "Needle" },
+};
+
+export const craftTools = pgTable("craft_tools", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  toolType: text("tool_type", { enum: TOOL_TYPES }).default("hook").notNull(),
+  size: text("size").default("").notNull(),
+  material: text("material").default("").notNull(),
+  brand: text("brand").default("").notNull(),
+  quantity: integer("quantity").default(1).notNull(),
+  imageUrl: text("image_url").default("").notNull(),
+  notes: text("notes").default("").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -98,6 +168,8 @@ export const books = pgTable("books", {
   status: text("status", { enum: BOOK_STATUSES }).default("want_to_read").notNull(),
   rating: integer("rating"),
   notes: text("notes").default("").notNull(),
+  totalPages: integer("total_pages").default(0).notNull(),
+  dateFinished: date("date_finished"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -211,8 +283,121 @@ export const goals = pgTable("goals", {
   quarter: integer("quarter").notNull(),
   year: integer("year").notNull(),
   description: text("description").default("").notNull(),
+  measurable: text("measurable").default("").notNull(),
+  targetDate: date("target_date"),
+  reward: text("reward").default("").notNull(),
   status: text("status", { enum: ["active", "completed", "paused"] }).default("active").notNull(),
   progressPercent: integer("progress_percent").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Mood ─────────────────────────────────────────────────────────────────────
+
+export const MOOD_META: Record<number, { label: string; emoji: string; color: string }> = {
+  1: { label: "Rough",   emoji: "😞", color: "#e05050" },
+  2: { label: "Low",     emoji: "😕", color: "#e08050" },
+  3: { label: "Okay",    emoji: "😐", color: "#c9913a" },
+  4: { label: "Good",    emoji: "🙂", color: "#6fa8a3" },
+  5: { label: "Great",   emoji: "😊", color: "#3d8c6a" },
+};
+
+export const moodLogs = pgTable("mood_logs", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  mood: integer("mood").notNull(),
+  note: text("note").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Journal ──────────────────────────────────────────────────────────────────
+
+export const journalEntries = pgTable("journal_entries", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  content: text("content").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Budget ───────────────────────────────────────────────────────────────────
+
+export const EXPENSE_CATEGORIES = [
+  "food", "transport", "shopping", "entertainment",
+  "health", "bills", "housing", "education", "travel", "care", "other",
+] as const;
+export const INCOME_CATEGORIES = [
+  "salary", "freelance", "gift", "investment", "other_income",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
+
+export const EXPENSE_CATEGORY_META: Record<ExpenseCategory, { label: string; emoji: string; color: string }> = {
+  food:          { label: "Food & Dining",   emoji: "🍽️",  color: "#c9913a" },
+  transport:     { label: "Transport",        emoji: "🚗",  color: "#4a7a8c" },
+  shopping:      { label: "Shopping",         emoji: "🛍️", color: "#c45a7a" },
+  entertainment: { label: "Entertainment",    emoji: "🎬",  color: "#7c5cba" },
+  health:        { label: "Health",           emoji: "💊",  color: "#3d8c6a" },
+  bills:         { label: "Bills",            emoji: "💡",  color: "#b89060" },
+  housing:       { label: "Housing",          emoji: "🏠",  color: "#8a6a1a" },
+  education:     { label: "Education",        emoji: "📚",  color: "#5a7ab8" },
+  travel:        { label: "Travel",           emoji: "✈️", color: "#6fa8a3" },
+  care:          { label: "Personal Care",    emoji: "✨",  color: "#c88890" },
+  other:         { label: "Other",            emoji: "📦",  color: "#8a8070" },
+};
+
+export const INCOME_CATEGORY_META: Record<IncomeCategory, { label: string; emoji: string; color: string }> = {
+  salary:       { label: "Salary",       emoji: "💼", color: "#3d8c6a" },
+  freelance:    { label: "Freelance",    emoji: "💻", color: "#4a7a8c" },
+  gift:         { label: "Gift",         emoji: "🎁", color: "#c45a7a" },
+  investment:   { label: "Investment",   emoji: "📈", color: "#7c5cba" },
+  other_income: { label: "Other Income", emoji: "💰", color: "#b89060" },
+};
+
+export const budgetTransactions = pgTable("budget_transactions", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  amount: real("amount").notNull(),
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  category: text("category").notNull().default("other"),
+  description: text("description").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Goal Milestones ──────────────────────────────────────────────────────────
+
+export const goalMilestones = pgTable("goal_milestones", {
+  id: serial("id").primaryKey(),
+  goalId: integer("goal_id")
+    .references(() => goals.id, { onDelete: "cascade" })
+    .notNull(),
+  title: text("title").notNull(),
+  dueDate: date("due_date"),
+  reward: text("reward").default("").notNull(),
+  completed: boolean("completed").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Weekly Review ────────────────────────────────────────────────────────────
+
+export const weeklyReviews = pgTable("weekly_reviews", {
+  id: serial("id").primaryKey(),
+  weekStart: date("week_start").notNull(),
+  wins: text("wins").default("").notNull(),
+  challenges: text("challenges").default("").notNull(),
+  focusNext: text("focus_next").default("").notNull(),
+  gratitude: text("gratitude").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Reading Goal ─────────────────────────────────────────────────────────────
+
+export const readingGoals = pgTable("reading_goals", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  goalCount: integer("goal_count").notNull().default(12),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -228,6 +413,53 @@ export const declutterAreas = pgTable("declutter_areas", {
   notes: text("notes").default("").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Yarn Stash ───────────────────────────────────────────────────────────────
+
+export const YARN_WEIGHTS = ["lace", "fingering", "sport", "dk", "worsted", "aran", "bulky", "super-bulky"] as const;
+export type YarnWeight = (typeof YARN_WEIGHTS)[number];
+
+export const YARN_WEIGHT_META: Record<YarnWeight, { label: string; color: string; textColor: string }> = {
+  "lace":        { label: "Lace",        color: "#f0eaf5", textColor: "#7a4a9a" },
+  "fingering":   { label: "Fingering",   color: "#e8f0fa", textColor: "#3a5a8a" },
+  "sport":       { label: "Sport",       color: "#e8f5ec", textColor: "#2e6e4a" },
+  "dk":          { label: "DK",          color: "#f5f0e8", textColor: "#7a5a2a" },
+  "worsted":     { label: "Worsted",     color: "#fae8e8", textColor: "#8a3a3a" },
+  "aran":        { label: "Aran",        color: "#faf0e0", textColor: "#7a5a1a" },
+  "bulky":       { label: "Bulky",       color: "#e8f5f0", textColor: "#2a6a5a" },
+  "super-bulky": { label: "Super Bulky", color: "#f5e8f0", textColor: "#7a2a5a" },
+};
+
+export const yarnStash = pgTable("yarn_stash", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  brand: text("brand").default("").notNull(),
+  colorway: text("colorway").default("").notNull(),
+  weight: text("weight").default("worsted").notNull(),
+  fiber: text("fiber").default("").notNull(),
+  yardage: integer("yardage"),
+  grams: integer("grams"),
+  colorHex: text("color_hex").default("#c8a882").notNull(),
+  totalSkeins: real("total_skeins").default(1).notNull(),
+  skeinsRemaining: real("skeins_remaining").default(1).notNull(),
+  imageUrl: text("image_url").default("").notNull(),
+  notes: text("notes").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const yarnUsage = pgTable("yarn_usage", {
+  id: serial("id").primaryKey(),
+  yarnId: integer("yarn_id")
+    .references(() => yarnStash.id, { onDelete: "cascade" })
+    .notNull(),
+  projectId: integer("project_id")
+    .references(() => crochetProjects.id, { onDelete: "set null" }),
+  skeinsUsed: real("skeins_used").default(1).notNull(),
+  dateUsed: date("date_used").notNull(),
+  notes: text("notes").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -251,3 +483,14 @@ export type Workout = typeof workouts.$inferSelect;
 export type ExerciseSet = typeof exerciseSets.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type DeclutterArea = typeof declutterAreas.$inferSelect;
+export type MoodLog = typeof moodLogs.$inferSelect;
+export type JournalEntry = typeof journalEntries.$inferSelect;
+export type BudgetTransaction = typeof budgetTransactions.$inferSelect;
+export type GoalMilestone = typeof goalMilestones.$inferSelect;
+export type WeeklyReview = typeof weeklyReviews.$inferSelect;
+export type ReadingGoal = typeof readingGoals.$inferSelect;
+export type YarnStash = typeof yarnStash.$inferSelect;
+export type YarnUsage = typeof yarnUsage.$inferSelect;
+export type ProjectJournalEntry = typeof projectJournalEntries.$inferSelect;
+export type GaugeSwatch = typeof gaugeSwatches.$inferSelect;
+export type CraftTool = typeof craftTools.$inferSelect;

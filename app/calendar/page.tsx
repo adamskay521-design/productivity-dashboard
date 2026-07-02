@@ -31,7 +31,7 @@ const EVENT_COLORS = [
   "#b89060", "#c9888c", "#6fa8a3", "#c9913a", "#7c5cba", "#3d8c6a",
 ];
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const PRIORITY_STYLES: Record<string, { chip: string; dot: string }> = {
   high:   { chip: "bg-drose-100 text-drose-700",   dot: "bg-drose-400"  },
@@ -41,8 +41,8 @@ const PRIORITY_STYLES: Record<string, { chip: string; dot: string }> = {
 
 function getCalendarDays(month: Date): Date[] {
   return eachDayOfInterval({
-    start: startOfWeek(startOfMonth(month)),
-    end:   endOfWeek(endOfMonth(month)),
+    start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
+    end:   endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
   });
 }
 
@@ -61,8 +61,8 @@ export default function CalendarPage() {
   const [saving, setSaving] = useState(false);
 
   async function load() {
-    const start = format(startOfWeek(startOfMonth(currentMonth)), "yyyy-MM-dd");
-    const end = format(endOfWeek(endOfMonth(currentMonth)), "yyyy-MM-dd");
+    const start = format(startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const end = format(endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 1 }), "yyyy-MM-dd");
     const [t, h, l, ev] = await Promise.all([
       fetch("/api/tasks").then((r) => r.json()),
       fetch("/api/habits").then((r) => r.json()),

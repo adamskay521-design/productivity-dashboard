@@ -10,18 +10,26 @@ export async function PATCH(
   try {
     const id = parseInt(params.id);
     const body = await request.json();
-    const { name, status, patternName, patternUrl, yarnBrand, yarnColor, hookSize, notes, progressPercent, imageUrl } = body;
+    const {
+      name, status, craftType, patternName, patternUrl, yarnBrand, yarnColor,
+      hookSize, needleSize, needleType, currentRow, tags, notes, progressPercent, imageUrl,
+    } = body;
 
     const [project] = await db
       .update(crochetProjects)
       .set({
         ...(name !== undefined && { name }),
         ...(status !== undefined && { status }),
+        ...(craftType !== undefined && { craftType }),
         ...(patternName !== undefined && { patternName }),
         ...(patternUrl !== undefined && { patternUrl }),
         ...(yarnBrand !== undefined && { yarnBrand }),
         ...(yarnColor !== undefined && { yarnColor }),
         ...(hookSize !== undefined && { hookSize }),
+        ...(needleSize !== undefined && { needleSize }),
+        ...(needleType !== undefined && { needleType }),
+        ...(currentRow !== undefined && { currentRow }),
+        ...(tags !== undefined && { tags }),
         ...(notes !== undefined && { notes }),
         ...(progressPercent !== undefined && { progressPercent }),
         ...(imageUrl !== undefined && { imageUrl }),

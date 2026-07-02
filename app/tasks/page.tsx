@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Plus, Trash2, Circle, CheckCircle2, Clock, X, Loader2 } from "lucide-react";
+import { Plus, Trash2, Circle, CheckCircle2, Clock, X, Loader2, Pencil } from "lucide-react";
 import type { Task, TaskCategory } from "@/lib/schema";
 import { CATEGORY_META, TASK_CATEGORIES } from "@/lib/schema";
 
@@ -67,7 +67,18 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
+    title: "",
+    description: "",
+    priority: "medium" as "low" | "medium" | "high",
+    category: "" as TaskCategory | "",
+    dueDate: "",
+  });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
     title: "",
     description: "",
     priority: "medium" as "low" | "medium" | "high",
@@ -91,14 +102,58 @@ export default function TasksPage() {
     e.preventDefault();
     if (!form.title.trim()) return;
     setSaving(true);
-    await fetch("/api/tasks", {
+    const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, category: form.category || null }),
     });
+    setSaving(false);
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Failed to create task" }));
+      setError(error || "Failed to create task");
+      return;
+    }
+    setError(null);
     setForm({ title: "", description: "", priority: "medium", category: "", dueDate: "" });
     setShowForm(false);
-    setSaving(false);
+    loadTasks();
+  }
+
+  function startEdit(task: Task) {
+    setEditingId(task.id);
+    setEditError(null);
+    setEditForm({
+      title: task.title,
+      description: task.description ?? "",
+      priority: task.priority as "low" | "medium" | "high",
+      category: (task.category ?? "") as TaskCategory | "",
+      dueDate: task.dueDate ?? "",
+    });
+    setShowForm(false);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError(null);
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (editingId === null || !editForm.title.trim()) return;
+    setEditSaving(true);
+    const res = await fetch(`/api/tasks/${editingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...editForm, category: editForm.category || null }),
+    });
+    setEditSaving(false);
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Failed to update task" }));
+      setEditError(error || "Failed to update task");
+      return;
+    }
+    setEditingId(null);
+    setEditError(null);
     loadTasks();
   }
 
@@ -135,7 +190,7 @@ export default function TasksPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => { setShowForm(true); setEditingId(null); }}
           className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" /> New Task
@@ -152,6 +207,11 @@ export default function TasksPage() {
             </button>
           </div>
           <form onSubmit={createTask} className="space-y-3">
+            {error && (
+              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
             <input
               type="text"
               placeholder="Task title"
@@ -325,63 +385,185 @@ export default function TasksPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((task) => (
-            <div
-              key={task.id}
-              className="bg-white rounded-xl border border-cream-100 shadow-sm px-5 py-4 flex items-start gap-4 group"
-              style={
-                task.category && task.category in CATEGORY_META
-                  ? { borderLeftWidth: 3, borderLeftColor: CATEGORY_META[task.category as TaskCategory].color }
-                  : {}
-              }
-            >
-              {/* Status toggle */}
-              <button
-                onClick={() => cycleStatus(task.id, task.status)}
-                className="mt-0.5 flex-shrink-0"
-                title="Cycle status"
+          {filtered.map((task) =>
+            editingId === task.id ? (
+              <div
+                key={task.id}
+                className="bg-white rounded-xl border border-nude-300 shadow-sm p-5"
               >
-                {task.status === "done" ? (
-                  <CheckCircle2 className="w-5 h-5 text-sage-400" />
-                ) : task.status === "in_progress" ? (
-                  <Circle className="w-5 h-5 text-nude-400 fill-nude-100" />
-                ) : (
-                  <Circle className="w-5 h-5 text-stone-300 hover:text-nude-400 transition-colors" />
-                )}
-              </button>
-
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm font-medium ${
-                    task.status === "done" ? "text-stone-400 line-through" : "text-stone-800"
-                  }`}
-                >
-                  {task.title}
-                </p>
-                {task.description && (
-                  <p className="text-xs text-stone-400 mt-0.5 truncate">{task.description}</p>
-                )}
-                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  <StatusBadge status={task.status} />
-                  <PriorityBadge priority={task.priority} />
-                  <CategoryBadge category={task.category} />
-                  {task.dueDate && (
-                    <span className="text-xs text-stone-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {format(parseISO(task.dueDate), "MMM d")}
-                    </span>
+                <form onSubmit={saveEdit} className="space-y-3">
+                  {editError && (
+                    <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                      {editError}
+                    </p>
                   )}
+                  <input
+                    type="text"
+                    placeholder="Task title"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                    autoFocus
+                    required
+                  />
+                  <textarea
+                    placeholder="Description (optional)"
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 resize-none"
+                    rows={2}
+                  />
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {/* Category */}
+                    <div className="col-span-2">
+                      <label className="text-xs text-stone-400 font-medium block mb-1">Category</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditForm({ ...editForm, category: "" })}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            editForm.category === ""
+                              ? "bg-stone-700 text-white border-stone-700"
+                              : "border-cream-300 text-stone-500 hover:bg-cream-50"
+                          }`}
+                        >
+                          None
+                        </button>
+                        {TASK_CATEGORIES.map((cat) => {
+                          const meta = CATEGORY_META[cat];
+                          const active = editForm.category === cat;
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setEditForm({ ...editForm, category: cat })}
+                              className="text-xs px-2.5 py-1 rounded-full border transition-all"
+                              style={
+                                active
+                                  ? { backgroundColor: meta.color, color: "white", borderColor: meta.color }
+                                  : { borderColor: meta.color + "60", color: meta.color, backgroundColor: meta.color + "10" }
+                              }
+                            >
+                              {meta.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Priority */}
+                    <div>
+                      <label className="text-xs text-stone-400 font-medium block mb-1">Priority</label>
+                      <select
+                        value={editForm.priority}
+                        onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as "low" | "medium" | "high" })}
+                        className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300 bg-white"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+
+                    {/* Due date */}
+                    <div>
+                      <label className="text-xs text-stone-400 font-medium block mb-1">Due date</label>
+                      <input
+                        type="date"
+                        value={editForm.dueDate}
+                        onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                        className="w-full border border-cream-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-nude-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="submit"
+                      disabled={editSaving}
+                      className="flex items-center gap-2 bg-nude-500 hover:bg-nude-600 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      {editSaving && <Loader2 className="w-3 h-3 animate-spin" />}
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="text-stone-500 hover:text-stone-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-cream-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <div
+                key={task.id}
+                className="bg-white rounded-xl border border-cream-100 shadow-sm px-5 py-4 flex items-start gap-4 group"
+                style={
+                  task.category && task.category in CATEGORY_META
+                    ? { borderLeftWidth: 3, borderLeftColor: CATEGORY_META[task.category as TaskCategory].color }
+                    : {}
+                }
+              >
+                {/* Status toggle */}
+                <button
+                  onClick={() => cycleStatus(task.id, task.status)}
+                  className="mt-0.5 flex-shrink-0"
+                  title="Cycle status"
+                >
+                  {task.status === "done" ? (
+                    <CheckCircle2 className="w-5 h-5 text-sage-400" />
+                  ) : task.status === "in_progress" ? (
+                    <Circle className="w-5 h-5 text-nude-400 fill-nude-100" />
+                  ) : (
+                    <Circle className="w-5 h-5 text-stone-300 hover:text-nude-400 transition-colors" />
+                  )}
+                </button>
+
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm font-medium ${
+                      task.status === "done" ? "text-stone-400 line-through" : "text-stone-800"
+                    }`}
+                  >
+                    {task.title}
+                  </p>
+                  {task.description && (
+                    <p className="text-xs text-stone-400 mt-0.5 truncate">{task.description}</p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    <StatusBadge status={task.status} />
+                    <PriorityBadge priority={task.priority} />
+                    <CategoryBadge category={task.category} />
+                    {task.dueDate && (
+                      <span className="text-xs text-stone-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {format(parseISO(task.dueDate), "MMM d")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                  <button
+                    onClick={() => startEdit(task)}
+                    className="text-stone-300 hover:text-nude-500"
+                    title="Edit task"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteTask(task.id)}
+                    className="text-stone-300 hover:text-red-400"
+                    title="Delete task"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-
-              <button
-                onClick={() => deleteTask(task.id)}
-                className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-400 transition-all flex-shrink-0"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
     </div>

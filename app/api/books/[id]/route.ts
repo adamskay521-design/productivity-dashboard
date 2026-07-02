@@ -10,7 +10,7 @@ export async function PATCH(
   try {
     const id = parseInt(params.id);
     const body = await request.json();
-    const { status, rating, notes } = body;
+    const { status, rating, notes, totalPages, dateFinished } = body;
 
     const [book] = await db
       .update(books)
@@ -18,6 +18,8 @@ export async function PATCH(
         ...(status !== undefined && { status }),
         ...(rating !== undefined && { rating: rating ?? null }),
         ...(notes !== undefined && { notes }),
+        ...(totalPages !== undefined && { totalPages }),
+        ...(dateFinished !== undefined && { dateFinished: dateFinished ?? null }),
         updatedAt: new Date(),
       })
       .where(eq(books.id, id))

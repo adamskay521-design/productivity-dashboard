@@ -35,3 +35,6 @@ next-env.d.ts
 
 # drizzle
 drizzle/
+
+# claude code local settings
+.claude/settings.local.json

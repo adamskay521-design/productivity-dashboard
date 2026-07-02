@@ -11,8 +11,8 @@ import {
   Clock, CalendarDays, CheckSquare, Target, Flame, Droplets, Dumbbell,
   Star, Package, BookOpen, Scissors, FileText, Music2,
 } from "lucide-react";
-import type { Task, Habit, HabitLog, TaskCategory, CalendarEvent, Goal, DeclutterArea } from "@/lib/schema";
-import { CATEGORY_META, TASK_CATEGORIES } from "@/lib/schema";
+import type { Task, Habit, HabitLog, TaskCategory, CalendarEvent, Goal, DeclutterArea, MoodLog, WeeklyReview } from "@/lib/schema";
+import { CATEGORY_META, TASK_CATEGORIES, MOOD_META } from "@/lib/schema";
 
 function calcStreak(dates: string[]): number {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -71,11 +71,16 @@ export default function Dashboard() {
   const [spotifyEmbedUrl, setSpotifyEmbedUrl] = useState("");
   const [spotifyInput, setSpotifyInput] = useState("");
   const [spotifyEditing, setSpotifyEditing] = useState(false);
+  const [recentMoods, setRecentMoods] = useState<MoodLog[]>([]);
+  const [weekReview, setWeekReview] = useState<WeeklyReview | null>(null);
+  const [reviewDraft, setReviewDraft] = useState({ wins: "", challenges: "", focusNext: "", gratitude: "" });
+  const [reviewSaving, setReviewSaving] = useState(false);
 
   const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const currentQ = Math.ceil((new Date().getMonth() + 1) / 3);
   const currentYear = new Date().getFullYear();
+  const currentWeekMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -111,6 +116,14 @@ export default function Dashboard() {
     setWaterCups(water.cups ?? 0);
     setLoading(false);
     setWaterLoading(false);
+
+    fetch("/api/mood?days=7").then(r => r.json()).then(d => setRecentMoods(Array.isArray(d) ? d : []));
+    fetch(`/api/weekly-review?weekStart=${currentWeekMonday}`).then(r => r.json()).then(d => {
+      if (d) {
+        setWeekReview(d);
+        setReviewDraft({ wins: d.wins ?? "", challenges: d.challenges ?? "", focusNext: d.focusNext ?? "", gratitude: d.gratitude ?? "" });
+      }
+    });
   }
 
   useEffect(() => { load(); }, [weekStart]);
@@ -191,6 +204,26 @@ export default function Dashboard() {
     }
   }
 
+  async function saveMood(mood: number) {
+    await fetch("/api/mood", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, mood }),
+    });
+    fetch("/api/mood?days=7").then(r => r.json()).then(d => setRecentMoods(Array.isArray(d) ? d : []));
+  }
+
+  async function saveWeekReview() {
+    setReviewSaving(true);
+    const saved = await fetch("/api/weekly-review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weekStart: currentWeekMonday, ...reviewDraft }),
+    }).then(r => r.json());
+    setWeekReview(saved);
+    setReviewSaving(false);
+  }
+
   const weekLabel = `${format(weekStart, "MMM d")} – ${format(addDays(weekStart, 6), "MMM d, yyyy")}`;
 
   return (
@@ -249,6 +282,84 @@ export default function Dashboard() {
           <p className="text-4xl font-bold text-white leading-none mb-1.5">{completedGoals.length}</p>
           <p className="text-xs text-nude-100/80">of {activeGoals.length} complete</p>
         </Link>
+      </div>
+
+      {/* ── MOOD + WEEKLY REVIEW ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Mood */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-4">How are you feeling?</p>
+          <div className="flex items-center gap-3 mb-4">
+            {[1,2,3,4,5].map((m) => {
+              const meta = MOOD_META[m];
+              const todayMood = recentMoods.find(r => r.date === todayStr);
+              const active = todayMood?.mood === m;
+              return (
+                <button key={m} onClick={() => saveMood(m)}
+                  title={meta.label}
+                  className={`flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all hover:scale-110 active:scale-95 ${
+                    active ? "scale-110" : "opacity-50 hover:opacity-100"
+                  }`}
+                  style={active ? { backgroundColor: meta.color + "20" } : {}}
+                >
+                  <span className="text-2xl leading-none">{meta.emoji}</span>
+                  <span className="text-[10px] font-medium" style={{ color: meta.color }}>{meta.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/* 7-day mood trail */}
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: 7 }, (_, i) => {
+              const d = format(addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), i), "yyyy-MM-dd");
+              const log = recentMoods.find(r => r.date === d);
+              const isToday2 = d === todayStr;
+              return (
+                <div key={d} className="flex flex-col items-center gap-1">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-sm transition-all ${isToday2 ? "ring-2 ring-offset-1 ring-stone-300" : ""}`}
+                    style={log ? { backgroundColor: MOOD_META[log.mood].color + "30" } : { backgroundColor: "#f1f5f9" }}
+                    title={`${d}: ${log ? MOOD_META[log.mood].label : "no entry"}`}
+                  >
+                    {log ? <span className="text-base">{MOOD_META[log.mood].emoji}</span> : <span className="w-1.5 h-1.5 rounded-full bg-stone-200 block" />}
+                  </div>
+                  <span className="text-[9px] text-stone-300">{format(parseISO(d), "E")[0]}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Weekly Review */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold">Week in Review</p>
+            <Link href="#" className="text-[10px] text-stone-300 hover:text-nude-500 transition-colors">
+              {format(parseISO(currentWeekMonday), "MMM d")} week
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { key: "wins",       label: "Wins",              placeholder: "What went well?" },
+              { key: "challenges", label: "Challenges",        placeholder: "What was hard?" },
+              { key: "focusNext",  label: "Focus next week",   placeholder: "What's the priority?" },
+              { key: "gratitude",  label: "Grateful for",      placeholder: "What are you thankful for?" },
+            ] as const).map(({ key, label, placeholder }) => (
+              <div key={key}>
+                <p className="text-[10px] font-semibold text-stone-400 mb-1 uppercase tracking-[0.1em]">{label}</p>
+                <textarea
+                  value={reviewDraft[key]}
+                  onChange={(e) => setReviewDraft((p) => ({ ...p, [key]: e.target.value }))}
+                  onBlur={saveWeekReview}
+                  placeholder={placeholder}
+                  rows={2}
+                  className="w-full text-xs text-stone-700 placeholder:text-stone-300 border border-cream-200 rounded-xl px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-nude-200 resize-none"
+                />
+              </div>
+            ))}
+          </div>
+          {reviewSaving && <p className="text-[10px] text-stone-300 mt-2">Saving…</p>}
+        </div>
       </div>
 
       {/* ── UPCOMING + HABITS + SPOTIFY ── */}
