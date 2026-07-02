@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { format, subDays, startOfWeek, addDays, parseISO } from "date-fns";
 import { Plus, Trash2, Flame, X, Loader2 } from "lucide-react";
 import type { Habit, HabitLog } from "@/lib/schema";
+import { HABIT_TIMES } from "@/lib/schema";
 
 const COLORS = [
   "#b89060", "#c9913a", "#3d8c6a", "#c45a7a",
@@ -11,6 +12,12 @@ const COLORS = [
 ];
 
 const HEATMAP_COLORS = ["#f1f5f9", "#f0dec8", "#e0a858", "#b07020", "#562e04"];
+
+const HABIT_TIME_LABELS: Record<(typeof HABIT_TIMES)[number], string> = {
+  morning: "Morning",
+  evening: "Evening",
+  anytime: "Anytime",
+};
 
 function calcStreak(dates: string[]): number {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -154,7 +161,7 @@ export default function HabitsPage() {
   const [view, setView] = useState<"week" | "year">("week");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", color: "#b89060" });
+  const [form, setForm] = useState({ name: "", description: "", color: "#b89060", timeOfDay: "anytime" as (typeof HABIT_TIMES)[number] });
 
   const today = format(new Date(), "yyyy-MM-dd");
   const week = last7Days();
@@ -191,7 +198,7 @@ export default function HabitsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    setForm({ name: "", description: "", color: "#b89060" });
+    setForm({ name: "", description: "", color: "#b89060", timeOfDay: "anytime" });
     setShowForm(false);
     setSaving(false);
     load();
@@ -255,6 +262,19 @@ export default function HabitsPage() {
                   <button key={c} type="button" onClick={() => setForm({ ...form, color: c })}
                     className={`w-7 h-7 rounded-full transition-transform ${form.color === c ? "scale-125 ring-2 ring-offset-1 ring-slate-400" : "hover:scale-110"}`}
                     style={{ backgroundColor: c }} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-stone-500 mb-2">Time of day</p>
+              <div className="flex gap-2">
+                {HABIT_TIMES.map((t) => (
+                  <button key={t} type="button" onClick={() => setForm({ ...form, timeOfDay: t })}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      form.timeOfDay === t ? "bg-nude-500 text-white shadow-sm" : "bg-cream-50 text-stone-500 hover:bg-cream-100"
+                    }`}>
+                    {HABIT_TIME_LABELS[t]}
+                  </button>
                 ))}
               </div>
             </div>

@@ -3,15 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  format, isToday, isPast, startOfWeek, addDays, addWeeks, subWeeks,
+  format, isToday, isPast, isSameMonth, isSameDay, startOfWeek, endOfWeek,
+  startOfMonth, endOfMonth, addDays, addWeeks, subWeeks, addMonths, subMonths,
   subDays, eachDayOfInterval, parseISO,
 } from "date-fns";
 import {
   ChevronLeft, ChevronRight, Circle, CheckCircle2, Plus, X, Loader2,
   Clock, CalendarDays, CheckSquare, Target, Flame, Droplets, Dumbbell,
-  Star, Package, BookOpen, Scissors, FileText, Music2,
+  Star, Package, BookOpen, Scissors, FileText, Music2, Sunrise, Moon,
+  UtensilsCrossed, Heart, Sparkles, Clapperboard, BookMarked, Archive,
+  Wrench, Timer, DollarSign, CalendarCheck,
 } from "lucide-react";
-import type { Task, Habit, HabitLog, TaskCategory, CalendarEvent, Goal, DeclutterArea, MoodLog, WeeklyReview } from "@/lib/schema";
+import type { Task, Habit, HabitLog, TaskCategory, CalendarEvent, Goal, DeclutterArea, MoodLog, WeeklyReview, DailyMeal, DailyCheckin } from "@/lib/schema";
 import { CATEGORY_META, TASK_CATEGORIES, MOOD_META } from "@/lib/schema";
 
 function calcStreak(dates: string[]): number {
@@ -75,6 +78,14 @@ export default function Dashboard() {
   const [weekReview, setWeekReview] = useState<WeeklyReview | null>(null);
   const [reviewDraft, setReviewDraft] = useState({ wins: "", challenges: "", focusNext: "", gratitude: "" });
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [dailyMeals, setDailyMeals] = useState<DailyMeal | null>(null);
+  const [mealsDraft, setMealsDraft] = useState({ breakfast: "", lunch: "", dinner: "", snacks: "" });
+  const [mealsSaving, setMealsSaving] = useState(false);
+  const [dailyCheckin, setDailyCheckin] = useState<DailyCheckin | null>(null);
+  const [checkinDraft, setCheckinDraft] = useState({ gratitude: "", affirmation: "" });
+  const [checkinSaving, setCheckinSaving] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
+  const [monthEvents, setMonthEvents] = useState<CalendarEvent[]>([]);
 
   const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -124,9 +135,30 @@ export default function Dashboard() {
         setReviewDraft({ wins: d.wins ?? "", challenges: d.challenges ?? "", focusNext: d.focusNext ?? "", gratitude: d.gratitude ?? "" });
       }
     });
+    fetch(`/api/meals?date=${todayStr}`).then(r => r.json()).then(d => {
+      if (d) {
+        setDailyMeals(d);
+        setMealsDraft({ breakfast: d.breakfast ?? "", lunch: d.lunch ?? "", dinner: d.dinner ?? "", snacks: d.snacks ?? "" });
+      }
+    });
+    fetch(`/api/daily-checkin?date=${todayStr}`).then(r => r.json()).then(d => {
+      if (d) {
+        setDailyCheckin(d);
+        setCheckinDraft({ gratitude: d.gratitude ?? "", affirmation: d.affirmation ?? "" });
+      }
+    });
   }
 
   useEffect(() => { load(); }, [weekStart]);
+
+  async function loadMonthEvents() {
+    const start = format(startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const end = format(endOfWeek(endOfMonth(calendarMonth), { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const ev = await fetch(`/api/events?start=${start}&end=${end}`).then(r => r.json());
+    setMonthEvents(Array.isArray(ev) ? ev : []);
+  }
+
+  useEffect(() => { loadMonthEvents(); }, [calendarMonth]);
 
   function eventsForDay(date: Date) {
     return weekEvents.filter(e => e.date === format(date, "yyyy-MM-dd"));
@@ -154,6 +186,12 @@ export default function Dashboard() {
   const openCount = tasks.filter(t => t.status !== "done").length;
   const todayDoneSet = doneHabitsForDay(new Date());
   const todayHabitsDone = todayDoneSet.size;
+  const morningHabits = habits.filter(h => h.timeOfDay === "morning");
+  const eveningHabits = habits.filter(h => h.timeOfDay === "evening");
+  const calendarDays = eachDayOfInterval({
+    start: startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 1 }),
+    end: endOfWeek(endOfMonth(calendarMonth), { weekStartsOn: 1 }),
+  });
   const activeGoals = goals.filter(g => g.status !== "completed");
   const completedGoals = goals.filter(g => g.status === "completed");
   const avgProgress = activeGoals.length > 0
@@ -222,6 +260,33 @@ export default function Dashboard() {
     }).then(r => r.json());
     setWeekReview(saved);
     setReviewSaving(false);
+  }
+
+  async function saveMeals() {
+    setMealsSaving(true);
+    const saved = await fetch("/api/meals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, ...mealsDraft }),
+    }).then(r => r.json());
+    setDailyMeals(saved);
+    setMealsSaving(false);
+  }
+
+  async function saveCheckin() {
+    setCheckinSaving(true);
+    const saved = await fetch("/api/daily-checkin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, ...checkinDraft }),
+    }).then(r => r.json());
+    setDailyCheckin(saved);
+    setCheckinSaving(false);
+  }
+
+  function eventsForMonthDay(date: Date) {
+    const ds = format(date, "yyyy-MM-dd");
+    return monthEvents.filter(e => e.date === ds);
   }
 
   const weekLabel = `${format(weekStart, "MMM d")} – ${format(addDays(weekStart, 6), "MMM d, yyyy")}`;
@@ -359,6 +424,132 @@ export default function Dashboard() {
             ))}
           </div>
           {reviewSaving && <p className="text-[10px] text-stone-300 mt-2">Saving…</p>}
+        </div>
+      </div>
+
+      {/* ── MORNING + EVENING ROUTINE ── */}
+      {(morningHabits.length > 0 || eveningHabits.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-sage-50 rounded-3xl p-6 shadow-sm border border-sage-100">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-sage-600 font-semibold mb-4 flex items-center gap-2">
+              <Sunrise className="w-3.5 h-3.5" /> Morning Routine
+            </p>
+            {morningHabits.length > 0 ? (
+              <div className="flex gap-2 flex-wrap">
+                {morningHabits.map(habit => {
+                  const done = todayDoneSet.has(habit.id);
+                  return (
+                    <button key={habit.id} onClick={() => toggleHabit(habit.id, new Date())}
+                      title={habit.name}
+                      className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-all hover:scale-105 ${
+                        done ? "border-transparent text-white" : "border-sage-200 text-sage-700 bg-white"
+                      }`}
+                      style={done ? { backgroundColor: habit.color, borderColor: habit.color } : {}}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: done ? "rgba(255,255,255,0.7)" : habit.color }} />
+                      {habit.name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-sage-400">No morning habits tagged yet</p>
+            )}
+          </div>
+
+          <div className="bg-sage-50 rounded-3xl p-6 shadow-sm border border-sage-100">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-sage-600 font-semibold mb-4 flex items-center gap-2">
+              <Moon className="w-3.5 h-3.5" /> Evening Routine
+            </p>
+            {eveningHabits.length > 0 ? (
+              <div className="flex gap-2 flex-wrap">
+                {eveningHabits.map(habit => {
+                  const done = todayDoneSet.has(habit.id);
+                  return (
+                    <button key={habit.id} onClick={() => toggleHabit(habit.id, new Date())}
+                      title={habit.name}
+                      className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-all hover:scale-105 ${
+                        done ? "border-transparent text-white" : "border-sage-200 text-sage-700 bg-white"
+                      }`}
+                      style={done ? { backgroundColor: habit.color, borderColor: habit.color } : {}}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: done ? "rgba(255,255,255,0.7)" : habit.color }} />
+                      {habit.name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-sage-400">No evening habits tagged yet</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MEALS + GRATITUDE ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Meals Today */}
+        <div className="bg-cream-50 rounded-3xl p-6 shadow-sm border border-cream-200">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-4 flex items-center gap-2">
+            <UtensilsCrossed className="w-3.5 h-3.5 text-sage-500" /> Meals Today
+          </p>
+          <div className="space-y-2.5">
+            {([
+              { key: "breakfast", label: "Breakfast" },
+              { key: "lunch",     label: "Lunch" },
+              { key: "dinner",    label: "Dinner" },
+              { key: "snacks",    label: "Snacks" },
+            ] as const).map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-xs font-medium text-stone-500 w-16 flex-shrink-0">{label}</span>
+                <input
+                  type="text"
+                  value={mealsDraft[key]}
+                  onChange={(e) => setMealsDraft((p) => ({ ...p, [key]: e.target.value }))}
+                  onBlur={saveMeals}
+                  placeholder="—"
+                  className="flex-1 text-xs text-stone-700 placeholder:text-stone-300 border border-cream-200 rounded-xl px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-sage-200"
+                />
+              </div>
+            ))}
+          </div>
+          {mealsSaving && <p className="text-[10px] text-stone-300 mt-2">Saving…</p>}
+        </div>
+
+        {/* Daily Gratitude & Affirmation */}
+        <div className="bg-cream-50 rounded-3xl p-6 shadow-sm border border-cream-200">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-4 flex items-center gap-2">
+            <Heart className="w-3.5 h-3.5 text-sage-500" /> Gratitude &amp; Affirmation
+          </p>
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] font-semibold text-stone-400 mb-1 uppercase tracking-[0.1em] flex items-center gap-1">
+                <Heart className="w-2.5 h-2.5" /> Grateful for
+              </p>
+              <textarea
+                value={checkinDraft.gratitude}
+                onChange={(e) => setCheckinDraft((p) => ({ ...p, gratitude: e.target.value }))}
+                onBlur={saveCheckin}
+                placeholder="What are you grateful for today?"
+                rows={2}
+                className="w-full text-xs text-stone-700 placeholder:text-stone-300 border border-cream-200 rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-sage-200 resize-none"
+              />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-stone-400 mb-1 uppercase tracking-[0.1em] flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5" /> Today's affirmation
+              </p>
+              <textarea
+                value={checkinDraft.affirmation}
+                onChange={(e) => setCheckinDraft((p) => ({ ...p, affirmation: e.target.value }))}
+                onBlur={saveCheckin}
+                placeholder="A mantra to carry through the day"
+                rows={2}
+                className="w-full text-xs text-stone-700 placeholder:text-stone-300 border border-cream-200 rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-sage-200 resize-none"
+              />
+            </div>
+          </div>
+          {checkinSaving && <p className="text-[10px] text-stone-300 mt-2">Saving…</p>}
         </div>
       </div>
 
@@ -525,24 +716,97 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* ── MINI CALENDAR ── */}
+      <div className="bg-sage-50 rounded-3xl p-6 shadow-sm border border-sage-100">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-sage-600 font-semibold flex items-center gap-2">
+            <CalendarDays className="w-3.5 h-3.5" /> {format(calendarMonth, "MMMM yyyy")}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setCalendarMonth(m => subMonths(m, 1))}
+              className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-sage-500 hover:bg-sage-100 transition-colors">
+              <ChevronLeft className="w-3 h-3" />
+            </button>
+            <button onClick={() => setCalendarMonth(m => addMonths(m, 1))}
+              className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-sage-500 hover:bg-sage-100 transition-colors">
+              <ChevronRight className="w-3 h-3" />
+            </button>
+            <Link href="/calendar" className="text-[10px] text-sage-500 hover:text-sage-700 transition-colors ml-1">
+              View full →
+            </Link>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-1.5">
+          {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+            <span key={i} className="text-[9px] font-bold uppercase text-sage-400 text-center">{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {calendarDays.map(day => {
+            const inMonth = isSameMonth(day, calendarMonth);
+            const today = isToday(day);
+            const hasEvents = eventsForMonthDay(day).length > 0;
+            return (
+              <div key={day.toISOString()}
+                className={`aspect-square flex flex-col items-center justify-center rounded-lg text-xs ${
+                  today ? "bg-sage-400 text-white font-bold" : inMonth ? "text-stone-600" : "text-sage-200"
+                }`}>
+                {format(day, "d")}
+                {hasEvents && !today && <span className="w-1 h-1 rounded-full bg-sage-400 mt-0.5" />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── QUICK NAV ── */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { href: "/tasks",     icon: <CheckSquare className="w-5 h-5" />, label: "Tasks",     color: "text-nude-500" },
-          { href: "/habits",    icon: <Target className="w-5 h-5" />,      label: "Habits",    color: "text-sage-500" },
-          { href: "/calendar",  icon: <CalendarDays className="w-5 h-5" />,label: "Calendar",  color: "text-blue-400" },
-          { href: "/fitness",   icon: <Dumbbell className="w-5 h-5" />,    label: "Fitness",   color: "text-orange-400" },
-          { href: "/goals",     icon: <Star className="w-5 h-5" />,        label: "Goals",     color: "text-amber-400" },
-          { href: "/declutter", icon: <Package className="w-5 h-5" />,     label: "Declutter", color: "text-purple-400" },
-          { href: "/reading",   icon: <BookOpen className="w-5 h-5" />,    label: "Reading",   color: "text-teal-500" },
-          { href: "/crochet",   icon: <Scissors className="w-5 h-5" />,    label: "Crochet",   color: "text-drose-400" },
-          { href: "/notes",     icon: <FileText className="w-5 h-5" />,    label: "Notes",     color: "text-stone-400" },
-        ].map(item => (
-          <Link key={item.href} href={item.href}
-            className="bg-white rounded-2xl p-3 shadow-sm hover:shadow-md transition-all text-center group flex flex-col items-center gap-1.5">
-            <div className={`${item.color} transition-transform group-hover:scale-110`}>{item.icon}</div>
-            <p className="text-xs font-semibold text-stone-600 group-hover:text-stone-900 leading-tight">{item.label}</p>
-          </Link>
+          {
+            title: "Daily", items: [
+              { href: "/tasks",    icon: <CheckSquare className="w-4 h-4" />,  label: "Tasks" },
+              { href: "/habits",   icon: <Target className="w-4 h-4" />,       label: "Habits" },
+              { href: "/journal",  icon: <BookMarked className="w-4 h-4" />,   label: "Journal" },
+              { href: "/calendar", icon: <CalendarDays className="w-4 h-4" />, label: "Calendar" },
+            ],
+          },
+          {
+            title: "Goals & Growth", items: [
+              { href: "/goals",          icon: <Star className="w-4 h-4" />,         label: "Goals" },
+              { href: "/monthly-review", icon: <CalendarCheck className="w-4 h-4" />, label: "Monthly Review" },
+              { href: "/focus",          icon: <Timer className="w-4 h-4" />,        label: "Focus Timer" },
+            ],
+          },
+          {
+            title: "Wellness & Creative", items: [
+              { href: "/fitness",    icon: <Dumbbell className="w-4 h-4" />,     label: "Fitness" },
+              { href: "/reading",    icon: <BookOpen className="w-4 h-4" />,     label: "Reading" },
+              { href: "/watchlist",  icon: <Clapperboard className="w-4 h-4" />, label: "Watchlist" },
+              { href: "/crochet",    icon: <Scissors className="w-4 h-4" />,     label: "Crochet & Knitting" },
+              { href: "/yarn-stash", icon: <Archive className="w-4 h-4" />,      label: "Yarn Stash" },
+              { href: "/tools",      icon: <Wrench className="w-4 h-4" />,       label: "Tools" },
+              { href: "/notes",      icon: <FileText className="w-4 h-4" />,     label: "Notes" },
+            ],
+          },
+          {
+            title: "Home & Money", items: [
+              { href: "/budget",     icon: <DollarSign className="w-4 h-4" />, label: "Budget" },
+              { href: "/declutter",  icon: <Package className="w-4 h-4" />,    label: "Declutter" },
+            ],
+          },
+        ].map(group => (
+          <div key={group.title} className="bg-white rounded-3xl p-5 shadow-sm">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-3">{group.title}</p>
+            <div className="space-y-0.5">
+              {group.items.map(item => (
+                <Link key={item.href} href={item.href}
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl text-stone-600 hover:text-sage-700 hover:bg-sage-50 transition-colors text-sm">
+                  <span className="text-sage-400">{item.icon}</span>
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 

@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { title, category, quarter, year, description, measurable, targetDate, reward } = body;
+    const { title, category, goalType, quarter, year, description, measurable, targetDate, reward } = body;
     if (!title?.trim() || !quarter || !year) {
       return NextResponse.json({ error: "title, quarter, year required" }, { status: 400 });
     }
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       .values({
         title: title.trim(),
         category: category || "personal",
+        goalType: goalType === "mega" ? "mega" : "mini",
         quarter,
         year,
         description: description || "",

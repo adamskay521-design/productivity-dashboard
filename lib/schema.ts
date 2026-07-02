@@ -36,11 +36,15 @@ export const tasks = pgTable("tasks", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const HABIT_TIMES = ["morning", "evening", "anytime"] as const;
+export type HabitTime = (typeof HABIT_TIMES)[number];
+
 export const habits = pgTable("habits", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").default(""),
   color: text("color").default("#b89060").notNull(),
+  timeOfDay: text("time_of_day", { enum: HABIT_TIMES }).default("anytime").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -174,6 +178,57 @@ export const books = pgTable("books", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ─── Watchlist (Movies/TV) ─────────────────────────────────────────────────────
+
+export const MEDIA_TYPES = ["movie", "tv"] as const;
+export type MediaType = (typeof MEDIA_TYPES)[number];
+
+export const WATCH_STATUSES = ["want_to_watch", "watching", "watched", "dropped"] as const;
+export type WatchStatus = (typeof WATCH_STATUSES)[number];
+
+export const WATCH_STATUS_META: Record<WatchStatus, { label: string; color: string }> = {
+  want_to_watch: { label: "Want to Watch", color: "#c9913a" },
+  watching:      { label: "Watching",      color: "#b89060" },
+  watched:       { label: "Watched",       color: "#3d8c6a" },
+  dropped:       { label: "Dropped",       color: "#8c6a5a" },
+};
+
+export const watchlist = pgTable("watchlist", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  mediaType: text("media_type", { enum: MEDIA_TYPES }).default("movie").notNull(),
+  posterUrl: text("poster_url").default("").notNull(),
+  status: text("status", { enum: WATCH_STATUSES }).default("want_to_watch").notNull(),
+  rating: integer("rating"),
+  notes: text("notes").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Daily Meals ────────────────────────────────────────────────────────────────
+
+export const dailyMeals = pgTable("daily_meals", {
+  id: serial("id").primaryKey(),
+  date: text("date").unique().notNull(), // "yyyy-MM-dd"
+  breakfast: text("breakfast").default("").notNull(),
+  lunch: text("lunch").default("").notNull(),
+  dinner: text("dinner").default("").notNull(),
+  snacks: text("snacks").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Daily Check-In (gratitude + affirmation) ───────────────────────────────────
+
+export const dailyCheckins = pgTable("daily_checkins", {
+  id: serial("id").primaryKey(),
+  date: text("date").unique().notNull(),
+  gratitude: text("gratitude").default("").notNull(),
+  affirmation: text("affirmation").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ─── Events ──────────────────────────────────────────────────────────────────
 
 export const events = pgTable("events", {
@@ -276,10 +331,19 @@ export const GOAL_CATEGORY_META: Record<GoalCategory, { label: string; color: st
   social:        { label: "Social",        color: "#c45a7a", emoji: "🌸" },
 };
 
+export const GOAL_TYPES = ["mega", "mini"] as const;
+export type GoalType = (typeof GOAL_TYPES)[number];
+
+export const GOAL_TYPE_META: Record<GoalType, { label: string; color: string; emoji: string }> = {
+  mega: { label: "Mega Goal", color: "#8a5a3a", emoji: "🌟" },
+  mini: { label: "Mini Goal", color: "#6fa8a3", emoji: "🎯" },
+};
+
 export const goals = pgTable("goals", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   category: text("category", { enum: GOAL_CATEGORIES }).default("personal").notNull(),
+  goalType: text("goal_type", { enum: GOAL_TYPES }).default("mini").notNull(),
   quarter: integer("quarter").notNull(),
   year: integer("year").notNull(),
   description: text("description").default("").notNull(),
@@ -392,6 +456,71 @@ export const weeklyReviews = pgTable("weekly_reviews", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ─── Monthly Review ───────────────────────────────────────────────────────────
+
+export const CLOSEOUT_CATEGORIES = ["finance", "todo", "home", "brain_dump"] as const;
+export type CloseoutCategory = (typeof CLOSEOUT_CATEGORIES)[number];
+
+export const CLOSEOUT_CATEGORY_META: Record<CloseoutCategory, { label: string }> = {
+  finance:    { label: "Finance" },
+  todo:       { label: "To-Do List Review" },
+  home:       { label: "Home Management" },
+  brain_dump: { label: "Brain Dump & Idea Bank" },
+};
+
+// Fixed template — identical every month, lazily seeded per-month by the API route.
+export const CLOSEOUT_ITEMS: Record<CloseoutCategory, string[]> = {
+  finance: [
+    "Reconcile bank statements/spending for the month",
+    "Record income and current account balances",
+    "Review budget vs. actual spending",
+    "Pay any outstanding bills for the month",
+    "Double-check subscriptions, cancel any unnecessary or unused",
+  ],
+  todo: [
+    "Review running task list and adjust priority",
+    "Schedule important tasks in calendar",
+  ],
+  home: [
+    "Block cleaning tasks on calendar",
+    "Complete digital and physical filing (mail sorting, email sorting)",
+    "Grocery Plan & Schedule Shop",
+  ],
+  brain_dump: [
+    "Review and file brain dump",
+    "Review monthly tik tok saves and schedule, action, or file",
+    "Review monthly pinterest saves and schedule, action, or file",
+    "Notes app cleanup",
+    "iPhone app clean up",
+    "Camera Roll clean up",
+  ],
+};
+
+export const monthlyReviews = pgTable("monthly_reviews", {
+  id: serial("id").primaryKey(),
+  month: text("month").unique().notNull(), // "YYYY-MM"
+  wins: text("wins").default("").notNull(),
+  lessons: text("lessons").default("").notNull(),
+  checkIn: text("check_in").default("").notNull(),
+  gratitude: text("gratitude").default("").notNull(),
+  theme: text("theme").default("").notNull(),
+  mantra: text("mantra").default("").notNull(),
+  megaGoalFocus: text("mega_goal_focus").default("").notNull(),
+  miniGoalFocus: text("mini_goal_focus").default("").notNull(),
+  topProjects: text("top_projects").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const monthlyCloseoutItems = pgTable("monthly_closeout_items", {
+  id: serial("id").primaryKey(),
+  month: text("month").notNull(), // matches monthlyReviews.month by value, no FK
+  category: text("category", { enum: CLOSEOUT_CATEGORIES }).notNull(),
+  label: text("label").notNull(),
+  completed: boolean("completed").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ─── Reading Goal ─────────────────────────────────────────────────────────────
 
 export const readingGoals = pgTable("reading_goals", {
@@ -488,9 +617,14 @@ export type JournalEntry = typeof journalEntries.$inferSelect;
 export type BudgetTransaction = typeof budgetTransactions.$inferSelect;
 export type GoalMilestone = typeof goalMilestones.$inferSelect;
 export type WeeklyReview = typeof weeklyReviews.$inferSelect;
+export type MonthlyReview = typeof monthlyReviews.$inferSelect;
+export type MonthlyCloseoutItem = typeof monthlyCloseoutItems.$inferSelect;
 export type ReadingGoal = typeof readingGoals.$inferSelect;
 export type YarnStash = typeof yarnStash.$inferSelect;
 export type YarnUsage = typeof yarnUsage.$inferSelect;
 export type ProjectJournalEntry = typeof projectJournalEntries.$inferSelect;
 export type GaugeSwatch = typeof gaugeSwatches.$inferSelect;
 export type CraftTool = typeof craftTools.$inferSelect;
+export type Watchlist = typeof watchlist.$inferSelect;
+export type DailyMeal = typeof dailyMeals.$inferSelect;
+export type DailyCheckin = typeof dailyCheckins.$inferSelect;

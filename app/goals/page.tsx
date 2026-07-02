@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format, parseISO, isPast } from "date-fns";
 import { Plus, X, Trash2, Loader2, Trophy, Star, ChevronDown, ChevronUp, CheckSquare, Square, CalendarDays, Gift, Ruler } from "lucide-react";
 import type { Goal, GoalMilestone } from "@/lib/schema";
-import { GOAL_CATEGORIES, GOAL_CATEGORY_META } from "@/lib/schema";
+import { GOAL_CATEGORIES, GOAL_CATEGORY_META, GOAL_TYPES, GOAL_TYPE_META } from "@/lib/schema";
 
 function getCurrentQuarter() {
   return Math.floor(new Date().getMonth() / 3) + 1;
@@ -24,10 +24,11 @@ export default function GoalsPage() {
   const [milestones, setMilestones] = useState<Record<number, GoalMilestone[]>>({});
   const [milestoneInput, setMilestoneInput] = useState<Record<number, { title: string; dueDate: string; reward: string }>>({});
   const [form, setForm] = useState({
-    title: "", category: "personal" as string, description: "",
+    title: "", category: "personal" as string, goalType: "mini" as string, description: "",
     measurable: "", targetDate: "", reward: "",
   });
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
 
   async function load() {
     setLoading(true);
@@ -83,7 +84,7 @@ export default function GoalsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, targetDate: form.targetDate || null, quarter, year }),
     });
-    setForm({ title: "", category: "personal", description: "", measurable: "", targetDate: "", reward: "" });
+    setForm({ title: "", category: "personal", goalType: "mini", description: "", measurable: "", targetDate: "", reward: "" });
     setShowForm(false);
     setSaving(false);
     load();
@@ -118,7 +119,10 @@ export default function GoalsPage() {
     setGoals((prev) => prev.filter((g) => g.id !== id));
   }
 
-  const filtered = filterCategory === "all" ? goals : goals.filter((g) => g.category === filterCategory);
+  const filtered = goals.filter((g) =>
+    (filterCategory === "all" || g.category === filterCategory) &&
+    (filterType === "all" || g.goalType === filterType)
+  );
   const completed = filtered.filter((g) => g.status === "completed").length;
   const total = filtered.length;
 
@@ -193,6 +197,35 @@ export default function GoalsPage() {
         </div>
       )}
 
+      {/* Type filter */}
+      <div className="flex flex-wrap gap-2 mb-2">
+        <button
+          onClick={() => setFilterType("all")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            filterType === "all" ? "bg-stone-800 text-white" : "bg-white border border-cream-200 text-stone-500 hover:text-stone-700"
+          }`}
+        >
+          All Types
+        </button>
+        {GOAL_TYPES.map((t) => {
+          const meta = GOAL_TYPE_META[t];
+          const count = goals.filter((g) => g.goalType === t).length;
+          if (count === 0) return null;
+          return (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                filterType === t ? "text-white" : "bg-white border border-cream-200 text-stone-500 hover:text-stone-700"
+              }`}
+              style={filterType === t ? { backgroundColor: meta.color } : {}}
+            >
+              {meta.emoji} {meta.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
       {/* Category filter */}
       <div className="flex flex-wrap gap-2 mb-6">
         <button
@@ -251,6 +284,26 @@ export default function GoalsPage() {
                         form.category === cat ? "text-white shadow-sm scale-105" : "bg-cream-50 text-stone-500 hover:bg-cream-100"
                       }`}
                       style={form.category === cat ? { backgroundColor: meta.color } : {}}
+                    >
+                      {meta.emoji} {meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-stone-500 mb-2 block">Type</label>
+              <div className="flex flex-wrap gap-2">
+                {GOAL_TYPES.map((t) => {
+                  const meta = GOAL_TYPE_META[t];
+                  return (
+                    <button
+                      type="button" key={t}
+                      onClick={() => setForm({ ...form, goalType: t })}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                        form.goalType === t ? "text-white shadow-sm scale-105" : "bg-cream-50 text-stone-500 hover:bg-cream-100"
+                      }`}
+                      style={form.goalType === t ? { backgroundColor: meta.color } : {}}
                     >
                       {meta.emoji} {meta.label}
                     </button>
@@ -382,6 +435,16 @@ export default function GoalsPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <p className="text-xs text-stone-400">{meta.label}</p>
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                          style={{
+                            color: GOAL_TYPE_META[goal.goalType as keyof typeof GOAL_TYPE_META].color,
+                            backgroundColor: `${GOAL_TYPE_META[goal.goalType as keyof typeof GOAL_TYPE_META].color}1a`,
+                          }}
+                        >
+                          {GOAL_TYPE_META[goal.goalType as keyof typeof GOAL_TYPE_META].emoji}{" "}
+                          {GOAL_TYPE_META[goal.goalType as keyof typeof GOAL_TYPE_META].label}
+                        </span>
                         {goal.targetDate && (
                           <span className={`text-xs flex items-center gap-1 px-1.5 py-0.5 rounded-full ${
                             !isCompleted && isPast(parseISO(goal.targetDate))
@@ -460,7 +523,7 @@ export default function GoalsPage() {
 
                       {/* Milestones */}
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-stone-400 mb-2">Mini Goals</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-stone-400 mb-2">Milestones</p>
                         {(milestones[goal.id] ?? []).map((m) => {
                           const overdue = !m.completed && m.dueDate && isPast(parseISO(m.dueDate));
                           return (

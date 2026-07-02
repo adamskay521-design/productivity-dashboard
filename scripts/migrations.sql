@@ -147,3 +147,74 @@ CREATE TABLE IF NOT EXISTS craft_tools (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Goal type: Mega vs. Mini goal distinction
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS goal_type TEXT NOT NULL DEFAULT 'mini';
+
+-- Monthly reviews (one entry per calendar month, keyed by "YYYY-MM")
+CREATE TABLE IF NOT EXISTS monthly_reviews (
+  id               SERIAL PRIMARY KEY,
+  month            TEXT NOT NULL UNIQUE,
+  wins             TEXT NOT NULL DEFAULT '',
+  lessons          TEXT NOT NULL DEFAULT '',
+  check_in         TEXT NOT NULL DEFAULT '',
+  gratitude        TEXT NOT NULL DEFAULT '',
+  theme            TEXT NOT NULL DEFAULT '',
+  mantra           TEXT NOT NULL DEFAULT '',
+  mega_goal_focus  TEXT NOT NULL DEFAULT '',
+  mini_goal_focus  TEXT NOT NULL DEFAULT '',
+  top_projects     TEXT NOT NULL DEFAULT '',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Month-End Close-Out checklist items (fixed template, lazily seeded per month by the API route)
+CREATE TABLE IF NOT EXISTS monthly_closeout_items (
+  id         SERIAL PRIMARY KEY,
+  month      TEXT NOT NULL,
+  category   TEXT NOT NULL CHECK (category IN ('finance','todo','home','brain_dump')),
+  label      TEXT NOT NULL,
+  completed  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS monthly_closeout_items_month_category_label_idx
+  ON monthly_closeout_items (month, category, label);
+
+-- Habits: morning/evening/anytime tag for the dashboard's Routine widgets
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS time_of_day TEXT NOT NULL DEFAULT 'anytime';
+
+-- Watchlist (Movies/TV)
+CREATE TABLE IF NOT EXISTS watchlist (
+  id         SERIAL PRIMARY KEY,
+  title      TEXT NOT NULL,
+  media_type TEXT NOT NULL DEFAULT 'movie' CHECK (media_type IN ('movie','tv')),
+  poster_url TEXT NOT NULL DEFAULT '',
+  status     TEXT NOT NULL DEFAULT 'want_to_watch' CHECK (status IN ('want_to_watch','watching','watched','dropped')),
+  rating     INTEGER,
+  notes      TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Daily meals (breakfast/lunch/dinner/snacks, one row per day)
+CREATE TABLE IF NOT EXISTS daily_meals (
+  id         SERIAL PRIMARY KEY,
+  date       TEXT NOT NULL UNIQUE,
+  breakfast  TEXT NOT NULL DEFAULT '',
+  lunch      TEXT NOT NULL DEFAULT '',
+  dinner     TEXT NOT NULL DEFAULT '',
+  snacks     TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Daily check-in: gratitude + affirmation (distinct from weekly/monthly review gratitude)
+CREATE TABLE IF NOT EXISTS daily_checkins (
+  id          SERIAL PRIMARY KEY,
+  date        TEXT NOT NULL UNIQUE,
+  gratitude   TEXT NOT NULL DEFAULT '',
+  affirmation TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

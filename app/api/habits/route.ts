@@ -16,7 +16,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, description, color } = body;
+    const { name, description, color, timeOfDay } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
     const [habit] = await db
       .insert(habits)
-      .values({ name: name.trim(), description, color: color || "#6366f1" })
+      .values({ name: name.trim(), description, color: color || "#6366f1", timeOfDay: timeOfDay || "anytime" })
       .returning();
 
     return NextResponse.json(habit, { status: 201 });
