@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, date, boolean, real, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, date, boolean, real, numeric, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const TASK_CATEGORIES = [
   "house",
@@ -225,6 +225,40 @@ export const dailyCheckins = pgTable("daily_checkins", {
   date: text("date").unique().notNull(),
   gratitude: text("gratitude").default("").notNull(),
   affirmation: text("affirmation").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Daily Priorities (Top 3-5 for today) ───────────────────────────────────
+
+export const dailyPriorities = pgTable("daily_priorities", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(), // "yyyy-MM-dd"
+  text: text("text").notNull(),
+  completed: boolean("completed").default(false).notNull(),
+  position: integer("position").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Daily Schedule (hourly time-blocked plan for today) ────────────────────
+
+export const dailyScheduleBlocks = pgTable("daily_schedule_blocks", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(), // "yyyy-MM-dd"
+  hour: text("hour").notNull(), // "6am", "7am", ... "11pm"
+  task: text("task").default("").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  dateHourIdx: uniqueIndex("daily_schedule_blocks_date_hour_idx").on(table.date, table.hour),
+}));
+
+// ─── Brain Dump (free-text daily scratch space) ─────────────────────────────
+
+export const brainDumps = pgTable("brain_dumps", {
+  id: serial("id").primaryKey(),
+  date: text("date").unique().notNull(),
+  content: text("content").default("").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -628,3 +662,6 @@ export type CraftTool = typeof craftTools.$inferSelect;
 export type Watchlist = typeof watchlist.$inferSelect;
 export type DailyMeal = typeof dailyMeals.$inferSelect;
 export type DailyCheckin = typeof dailyCheckins.$inferSelect;
+export type DailyPriority = typeof dailyPriorities.$inferSelect;
+export type DailyScheduleBlock = typeof dailyScheduleBlocks.$inferSelect;
+export type BrainDump = typeof brainDumps.$inferSelect;

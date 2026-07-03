@@ -12,9 +12,9 @@ import {
   Clock, CalendarDays, CheckSquare, Target, Flame, Droplets, Dumbbell,
   Star, Package, BookOpen, Scissors, FileText, Music2, Sunrise, Moon,
   UtensilsCrossed, Heart, Sparkles, Clapperboard, BookMarked, Archive,
-  Wrench, Timer, DollarSign, CalendarCheck,
+  Wrench, Timer, DollarSign, CalendarCheck, ListChecks, Brain, Clock3,
 } from "lucide-react";
-import type { Task, Habit, HabitLog, TaskCategory, CalendarEvent, Goal, DeclutterArea, MoodLog, WeeklyReview, DailyMeal, DailyCheckin } from "@/lib/schema";
+import type { Task, Habit, HabitLog, TaskCategory, CalendarEvent, Goal, DeclutterArea, MoodLog, WeeklyReview, DailyMeal, DailyCheckin, DailyPriority, DailyScheduleBlock, BrainDump } from "@/lib/schema";
 import { CATEGORY_META, TASK_CATEGORIES, MOOD_META } from "@/lib/schema";
 
 function calcStreak(dates: string[]): number {
@@ -53,6 +53,11 @@ const PRIORITY_DOT: Record<string, string> = {
   high: "bg-drose-400", medium: "bg-amber-400", low: "bg-stone-300",
 };
 
+const SCHEDULE_HOURS = [
+  "6am", "7am", "8am", "9am", "10am", "11am", "12pm", "1pm", "2pm",
+  "3pm", "4pm", "5pm", "6pm", "7pm", "8pm", "9pm", "10pm", "11pm",
+];
+
 export default function Dashboard() {
   const [now, setNow] = useState(new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -86,6 +91,14 @@ export default function Dashboard() {
   const [checkinSaving, setCheckinSaving] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const [monthEvents, setMonthEvents] = useState<CalendarEvent[]>([]);
+  const [priorities, setPriorities] = useState<DailyPriority[]>([]);
+  const [priorityInput, setPriorityInput] = useState("");
+  const [priorityAdding, setPriorityAdding] = useState(false);
+  const [scheduleBlocks, setScheduleBlocks] = useState<DailyScheduleBlock[]>([]);
+  const [scheduleDraft, setScheduleDraft] = useState<Record<string, string>>({});
+  const [brainDump, setBrainDump] = useState<BrainDump | null>(null);
+  const [brainDumpDraft, setBrainDumpDraft] = useState("");
+  const [brainDumpSaving, setBrainDumpSaving] = useState(false);
 
   const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -145,6 +158,20 @@ export default function Dashboard() {
       if (d) {
         setDailyCheckin(d);
         setCheckinDraft({ gratitude: d.gratitude ?? "", affirmation: d.affirmation ?? "" });
+      }
+    });
+    fetch(`/api/daily-priorities?date=${todayStr}`).then(r => r.json()).then(d => setPriorities(Array.isArray(d) ? d : []));
+    fetch(`/api/daily-schedule?date=${todayStr}`).then(r => r.json()).then(d => {
+      const blocks = Array.isArray(d) ? d : [];
+      setScheduleBlocks(blocks);
+      const draft: Record<string, string> = {};
+      for (const b of blocks) draft[b.hour] = b.task;
+      setScheduleDraft(draft);
+    });
+    fetch(`/api/brain-dump?date=${todayStr}`).then(r => r.json()).then(d => {
+      if (d) {
+        setBrainDump(d);
+        setBrainDumpDraft(d.content ?? "");
       }
     });
   }
@@ -284,6 +311,56 @@ export default function Dashboard() {
     setCheckinSaving(false);
   }
 
+  async function addTopPriority(e: React.FormEvent) {
+    e.preventDefault();
+    if (!priorityInput.trim() || priorities.length >= 5) return;
+    setPriorityAdding(true);
+    const saved = await fetch("/api/daily-priorities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, text: priorityInput.trim(), position: priorities.length }),
+    }).then(r => r.json());
+    setPriorities(p => [...p, saved]);
+    setPriorityInput("");
+    setPriorityAdding(false);
+  }
+
+  async function togglePriority(id: number, completed: boolean) {
+    setPriorities(p => p.map(x => x.id === id ? { ...x, completed: !completed } : x));
+    await fetch(`/api/daily-priorities/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: !completed }),
+    });
+  }
+
+  async function deletePriority(id: number) {
+    setPriorities(p => p.filter(x => x.id !== id));
+    await fetch(`/api/daily-priorities/${id}`, { method: "DELETE" });
+  }
+
+  async function saveScheduleHour(hour: string) {
+    const task = scheduleDraft[hour] ?? "";
+    const saved = await fetch("/api/daily-schedule", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, hour, task }),
+    }).then(r => r.json());
+    setScheduleBlocks(blocks => {
+      const rest = blocks.filter(b => b.hour !== hour);
+      return [...rest, saved];
+    });
+  }
+
+  async function saveBrainDump() {
+    setBrainDumpSaving(true);
+    const saved = await fetch("/api/brain-dump", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, content: brainDumpDraft }),
+    }).then(r => r.json());
+    setBrainDump(saved);
+    setBrainDumpSaving(false);
+  }
+
   function eventsForMonthDay(date: Date) {
     const ds = format(date, "yyyy-MM-dd");
     return monthEvents.filter(e => e.date === ds);
@@ -347,6 +424,53 @@ export default function Dashboard() {
           <p className="text-4xl font-bold text-white leading-none mb-1.5">{completedGoals.length}</p>
           <p className="text-xs text-nude-50/80">of {activeGoals.length} complete</p>
         </Link>
+      </div>
+
+      {/* ── TOP PRIORITIES ── */}
+      <div className="bg-white rounded-3xl p-6 shadow-sm">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-4 flex items-center gap-2">
+          <ListChecks className="w-3.5 h-3.5 text-drose-400" /> Today's Top Priorities
+        </p>
+        <div className="space-y-1.5">
+          {Array.from({ length: 5 }, (_, i) => {
+            const p = priorities[i];
+            return (
+              <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded-xl hover:bg-stone-50 transition-colors">
+                <span className="text-xs font-bold text-stone-300 w-4 flex-shrink-0">{i + 1}.</span>
+                {p ? (
+                  <>
+                    <button onClick={() => togglePriority(p.id, p.completed)} className="flex-shrink-0">
+                      {p.completed
+                        ? <CheckCircle2 className="w-4 h-4 text-sage-400" />
+                        : <Circle className="w-4 h-4 text-stone-300 hover:text-drose-400 transition-colors" />
+                      }
+                    </button>
+                    <span className={`text-sm flex-1 ${p.completed ? "line-through text-stone-300" : "text-stone-700"}`}>
+                      {p.text}
+                    </span>
+                    <button onClick={() => deletePriority(p.id)} className="text-stone-300 hover:text-drose-400 transition-colors flex-shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : i === priorities.length ? (
+                  <form onSubmit={addTopPriority} className="flex-1 flex items-center gap-2">
+                    <input type="text" value={priorityInput} onChange={e => setPriorityInput(e.target.value)}
+                      placeholder="Add a priority..."
+                      className="flex-1 text-sm text-stone-700 placeholder:text-stone-300 border border-transparent focus:border-cream-200 rounded-lg px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-nude-200" />
+                    {priorityInput && (
+                      <button type="submit" disabled={priorityAdding}
+                        className="text-xs text-white bg-nude-500 hover:bg-nude-600 font-medium px-2.5 py-1 rounded-lg transition-colors disabled:opacity-60 flex-shrink-0">
+                        {priorityAdding ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
+                      </button>
+                    )}
+                  </form>
+                ) : (
+                  <span className="text-sm text-stone-300">—</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── MOOD + WEEKLY REVIEW ── */}
@@ -716,6 +840,22 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* ── BRAIN DUMP ── */}
+      <div className="bg-cream-50 rounded-3xl p-6 shadow-sm border border-cream-200">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-4 flex items-center gap-2">
+          <Brain className="w-3.5 h-3.5 text-sage-500" /> Brain Dump
+        </p>
+        <textarea
+          value={brainDumpDraft}
+          onChange={(e) => setBrainDumpDraft(e.target.value)}
+          onBlur={saveBrainDump}
+          placeholder="Get it out of your head — random thoughts, ideas, reminders..."
+          rows={4}
+          className="w-full text-sm text-stone-700 placeholder:text-stone-300 border border-cream-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-1 focus:ring-nude-200 resize-none"
+        />
+        {brainDumpSaving && <p className="text-[10px] text-stone-300 mt-2">Saving…</p>}
+      </div>
+
       {/* ── CRAFT JOURNAL ── */}
       <div className="bg-white rounded-3xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -841,6 +981,28 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ── TODAY'S SCHEDULE ── */}
+      <div className="bg-white rounded-3xl p-5 shadow-sm">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-semibold mb-4 flex items-center gap-2">
+          <Clock3 className="w-3.5 h-3.5 text-nude-400" /> Today's Schedule
+        </p>
+        <div className="max-h-[420px] overflow-y-auto pr-1 space-y-0.5">
+          {SCHEDULE_HOURS.map(hour => (
+            <div key={hour} className="flex items-center gap-3 py-1 px-2 rounded-lg hover:bg-stone-50 transition-colors">
+              <span className="text-xs font-semibold text-stone-400 w-12 flex-shrink-0">{hour}</span>
+              <input
+                type="text"
+                value={scheduleDraft[hour] ?? ""}
+                onChange={(e) => setScheduleDraft(d => ({ ...d, [hour]: e.target.value }))}
+                onBlur={() => saveScheduleHour(hour)}
+                placeholder="—"
+                className="flex-1 text-sm text-stone-700 placeholder:text-stone-300 border border-transparent focus:border-cream-200 rounded-lg px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-nude-200"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* ── WEEKLY PLANNER ── */}
       <div className="bg-white rounded-3xl p-5 shadow-sm">

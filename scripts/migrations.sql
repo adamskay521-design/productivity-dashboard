@@ -218,3 +218,35 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Daily priorities: short "Top 3-5" list for today, separate from the full task board
+CREATE TABLE IF NOT EXISTS daily_priorities (
+  id         SERIAL PRIMARY KEY,
+  date       TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  completed  BOOLEAN NOT NULL DEFAULT FALSE,
+  position   INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Daily schedule: hourly time-blocked plan for today
+CREATE TABLE IF NOT EXISTS daily_schedule_blocks (
+  id         SERIAL PRIMARY KEY,
+  date       TEXT NOT NULL,
+  hour       TEXT NOT NULL,
+  task       TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS daily_schedule_blocks_date_hour_idx
+  ON daily_schedule_blocks (date, hour);
+
+-- Brain dump: free-text daily scratch space
+CREATE TABLE IF NOT EXISTS brain_dumps (
+  id         SERIAL PRIMARY KEY,
+  date       TEXT NOT NULL UNIQUE,
+  content    TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
