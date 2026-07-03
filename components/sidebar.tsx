@@ -20,6 +20,7 @@ import {
   Wrench,
   CalendarCheck,
   Clapperboard,
+  Sparkles,
 } from "lucide-react";
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/journal",        label: "Journal",            icon: BookMarked },
   { href: "/calendar",       label: "Calendar",           icon: CalendarDays },
   { href: "/fitness",        label: "Fitness",            icon: Dumbbell },
+  { href: "/yoga",           label: "Yoga & Mobility",    icon: Sparkles },
   { href: "/goals",          label: "Goals",              icon: Star },
   { href: "/monthly-review", label: "Monthly Review",     icon: CalendarCheck },
   { href: "/budget",         label: "Budget",             icon: DollarSign },

@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import { format, parseISO } from "date-fns";
-import { Plus, Trash2, Trophy, Flame, Loader2, ChevronDown, ChevronUp, Dumbbell, TrendingDown, TrendingUp, Droplets, X, Check } from "lucide-react";
+import Link from "next/link";
+import { Plus, Trash2, Trophy, Flame, Loader2, ChevronDown, ChevronUp, Dumbbell, TrendingDown, TrendingUp, Droplets, X, Check, Sparkles, ArrowUp, Minus, Info, ArrowRight } from "lucide-react";
 import type { FitnessGoal, WeightLog, Workout, ExerciseSet } from "@/lib/schema";
 import { WORKOUT_TYPE_META, WORKOUT_TYPES } from "@/lib/schema";
+import { getProgressionAdvice, type LoggedSet } from "@/lib/progressiveOverload";
 
 type WorkoutWithSets = Workout & { exercises: ExerciseSet[] };
 
@@ -178,6 +180,28 @@ export default function FitnessPage() {
     await fetch(`/api/workouts/${id}`, { method: "DELETE" });
     loadAll();
   }
+
+  // Progressive overload: group logged exercise entries by name, most recent first
+  const exerciseHistory: Record<string, LoggedSet[]> = {};
+  workoutList.forEach((w) => {
+    w.exercises.forEach((ex) => {
+      const key = ex.exercise.trim().toLowerCase();
+      if (!key) return;
+      if (!exerciseHistory[key]) exerciseHistory[key] = [];
+      exerciseHistory[key].push({
+        date: w.date, sets: ex.sets, reps: ex.reps, weight: ex.weight, unit: ex.unit,
+      });
+    });
+  });
+  const progressionRows = Object.entries(exerciseHistory)
+    .map(([key, entries]) => {
+      const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+      const displayName = workoutList
+        .flatMap((w) => w.exercises)
+        .find((ex) => ex.exercise.trim().toLowerCase() === key)?.exercise ?? key;
+      return { name: displayName, latest: sorted[0], advice: getProgressionAdvice(sorted) };
+    })
+    .sort((a, b) => b.latest.date.localeCompare(a.latest.date));
 
   // PRs: max weight per exercise across all workouts
   const prs: Record<string, number> = {};
@@ -464,6 +488,55 @@ export default function FitnessPage() {
               </div>
             </div>
           )}
+
+          {/* Progressive overload */}
+          {progressionRows.length > 0 && (
+            <div className="bg-white rounded-2xl border border-cream-200 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowUp className="w-4 h-4 text-drose-400" />
+                <h2 className="font-semibold text-stone-900">Progressive overload</h2>
+              </div>
+              <p className="text-stone-400 text-sm mb-4">Based on what you've logged — whether to go up in weight next time</p>
+              <div className="space-y-2">
+                {progressionRows.map((row) => (
+                  <div key={row.name} className="flex items-start gap-3 py-2.5 border-b border-cream-100 last:border-0">
+                    <span className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                      row.advice.status === "increase" ? "bg-sage-100 text-sage-600"
+                        : row.advice.status === "hold" ? "bg-nude-100 text-nude-600"
+                        : "bg-cream-100 text-stone-400"
+                    }`}>
+                      {row.advice.status === "increase" ? <ArrowUp className="w-3.5 h-3.5" />
+                        : row.advice.status === "hold" ? <Minus className="w-3.5 h-3.5" />
+                        : <Info className="w-3.5 h-3.5" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="font-medium text-stone-800 text-sm">{row.name}</span>
+                        <span className="text-xs text-stone-400">
+                          last: {row.latest.sets} × {row.latest.reps} @ {row.latest.weight} {row.latest.unit}
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-500 mt-0.5">{row.advice.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Yoga & mobility guide */}
+          <Link href="/yoga" className="flex items-center justify-between bg-white rounded-2xl border border-cream-200 shadow-sm p-6 hover:shadow-md hover:border-drose-200 transition-all group">
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-drose-50 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-drose-400" />
+              </span>
+              <div>
+                <h2 className="font-semibold text-stone-900">Yoga &amp; Mobility Guide</h2>
+                <p className="text-stone-400 text-sm">6 guided flows with photos — from a 4-min desk break to a 25-min full practice</p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-stone-300 group-hover:text-drose-400 transition-colors flex-shrink-0" />
+          </Link>
 
           {/* Log workout button */}
           <div className="flex items-center justify-between">
