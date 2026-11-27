@@ -21,6 +21,7 @@ import {
   CalendarCheck,
   Clapperboard,
   Sparkles,
+  ClipboardList,
 } from "lucide-react";
 
 const navItems = [
@@ -38,6 +39,7 @@ const navItems = [
   { href: "/reading",     label: "Reading",            icon: BookOpen },
   { href: "/watchlist",   label: "Watchlist",          icon: Clapperboard },
   { href: "/crochet",     label: "Crochet & Knitting", icon: Scissors },
+  { href: "/patterns",    label: "Pattern Tracker",    icon: ClipboardList },
   { href: "/yarn-stash",  label: "Yarn Stash",         icon: Archive },
   { href: "/tools",       label: "Tools",              icon: Wrench },
   { href: "/notes",       label: "Notes",              icon: FileText },

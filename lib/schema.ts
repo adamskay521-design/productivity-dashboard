@@ -131,6 +131,50 @@ export const gaugeSwatches = pgTable("gauge_swatches", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ---------------------------------------------------------------------------
+// Pattern + Row Tracker
+// A "pattern" is an uploaded or pasted knitting/crochet pattern that has been
+// broken down into trackable rows. `currentRow` is a 0-based pointer into the
+// ordered rows, so the tracker always knows where you left off.
+// ---------------------------------------------------------------------------
+export const PATTERN_SOURCES = ["text", "image", "pdf"] as const;
+export type PatternSource = (typeof PATTERN_SOURCES)[number];
+
+export const patterns = pgTable("patterns", {
+  id: serial("id").primaryKey(),
+  // Optional link to a crochet/knitting project. If the project is deleted the
+  // pattern survives on its own, so we null the link rather than cascade.
+  projectId: integer("project_id").references(() => crochetProjects.id, {
+    onDelete: "set null",
+  }),
+  name: text("name").notNull(),
+  craftType: text("craft_type", { enum: CRAFT_TYPES }).default("crochet").notNull(),
+  sourceType: text("source_type", { enum: PATTERN_SOURCES }).default("text").notNull(),
+  sourceUrl: text("source_url").default("").notNull(), // blob URL of the uploaded photo/PDF, if any
+  rawText: text("raw_text").default("").notNull(), // original pattern text for reference / re-parse
+  notes: text("notes").default("").notNull(),
+  currentRow: integer("current_row").default(0).notNull(), // 0-based pointer into ordered rows
+  parsedByAi: boolean("parsed_by_ai").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const patternRows = pgTable("pattern_rows", {
+  id: serial("id").primaryKey(),
+  patternId: integer("pattern_id")
+    .references(() => patterns.id, { onDelete: "cascade" })
+    .notNull(),
+  position: integer("position").notNull(), // 0-based order within the pattern
+  section: text("section").default("").notNull(), // optional grouping, e.g. "Body", "Sleeve"
+  label: text("label").default("").notNull(), // e.g. "Row 1", "Round 5"
+  instruction: text("instruction").default("").notNull(),
+  stitchCount: integer("stitch_count"), // nullable — the (24) at the end of a row, when present
+  repeatTarget: integer("repeat_target").default(1).notNull(), // work this row/round N times
+  repeatDone: integer("repeat_done").default(0).notNull(), // how many of the N you've worked
+  completed: boolean("completed").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const TOOL_TYPES = ["hook", "needle"] as const;
 export type ToolType = (typeof TOOL_TYPES)[number];
 
@@ -636,6 +680,10 @@ export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
 export type CrochetProject = typeof crochetProjects.$inferSelect;
 export type NewCrochetProject = typeof crochetProjects.$inferInsert;
+export type Pattern = typeof patterns.$inferSelect;
+export type NewPattern = typeof patterns.$inferInsert;
+export type PatternRow = typeof patternRows.$inferSelect;
+export type NewPatternRow = typeof patternRows.$inferInsert;
 export type Book = typeof books.$inferSelect;
 export type NewBook = typeof books.$inferInsert;
 export type CalendarEvent = typeof events.$inferSelect;
